@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
-
+import * as sanitizeHtml from 'sanitize-html';
 @Injectable()
 export class ProductsService {
   constructor(
@@ -14,67 +14,93 @@ export class ProductsService {
     private productsRepository: Repository<Product>,
   ) {}
 
-  async uploadCsv(file: Express.Multer.File): Promise<void> {
+  async uploadCsv(
+    file: Express.Multer.File,
+  ): Promise<{ message: string; errors?: string[] }> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
     const products: Product[] = [];
     const exchangeRates = await this.fetchExchangeRates();
+    const errors: string[] = [];
+    let rowIndex = 0; // Track row number for error reporting
 
     const stream = fs
       .createReadStream(file.path)
       .pipe(parse({ columns: true, trim: true, delimiter: ';' }));
 
-    let rowIndex = 0; // To track the problematic row
     for await (const row of stream) {
       rowIndex++;
 
-      // Ensure required fields are present and non-empty
-      if (
-        !row.name ||
-        row.name.trim() === '' ||
-        !row.price ||
-        !row.expiration
-      ) {
-        throw new BadRequestException(
-          `CSV is missing required fields in row ${rowIndex}: ${JSON.stringify(row)}`,
-        );
-      }
+      // Sanitize and validate row data
+      const sanitizedName = sanitizeHtml(row.name || '', {
+        allowedTags: [], // Remove all HTML tags
+        allowedAttributes: {}, // No attributes allowed
+      }).trim();
 
-      const product = new Product();
-      product.name = row.name.trim();
-
-      // Ensure that price is a valid number
-      const priceStr = row.price.replace('$', '').trim();
+      const priceStr = (row.price || '').replace('$', '').trim();
       const price = parseFloat(priceStr);
-      if (isNaN(price)) {
-        throw new BadRequestException(
-          `Invalid price value "${priceStr}" in row ${rowIndex}`,
+      const expiration = (row.expiration || '').trim();
+
+      // Validation checks
+      if (!sanitizedName) {
+        errors.push(
+          `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
         );
+        continue; // Skip invalid row
       }
+      if (isNaN(price) || price < 0) {
+        errors.push(
+          `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`,
+        );
+        continue;
+      }
+      if (!this.isValidDate(expiration)) {
+        errors.push(
+          `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`,
+        );
+        continue;
+      }
+
+      // Create product if all validations pass
+      const product = new Product();
+      product.name = sanitizedName;
       product.price = price;
-
-      // Ensure that expiration is a non-empty string
-      product.expiration = row.expiration.trim();
-      if (product.expiration === '') {
-        throw new BadRequestException(
-          `Empty expiration value in row ${rowIndex}`,
-        );
-      }
-
+      product.expiration = expiration;
       product.exchangeRates = exchangeRates;
       products.push(product);
     }
 
-    if (products.length === 0) {
-      throw new BadRequestException(
-        'CSV file is empty or contains no valid rows',
-      );
+    // Save valid products
+    if (products.length > 0) {
+      await this.productsRepository.save(products, { chunk: 1000 });
+      console.log(`Saved ${products.length} products successfully`);
+    } else if (errors.length > 0) {
+      throw new BadRequestException({
+        message: 'No valid products to save',
+        errors,
+      });
     }
 
-    await this.productsRepository.save(products, { chunk: 1000 });
-    fs.unlinkSync(file.path); // Remove the temporary file after processing
+    // Clean up temporary file
+    fs.unlinkSync(file.path);
+
+    // Return response with optional errors
+    return {
+      message: `File uploaded successfully, processed ${products.length} products`,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  }
+
+  // Helper to validate date format (YYYY-MM-DD)
+  private isValidDate(dateStr: string): boolean {
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regex.test(dateStr)) return false;
+    const date = new Date(dateStr);
+    return (
+      !isNaN(date.getTime()) && dateStr === date.toISOString().split('T')[0]
+    );
   }
 
   async fetchExchangeRates(): Promise<{ [key: string]: number }> {

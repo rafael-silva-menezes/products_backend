@@ -5,14 +5,14 @@ export class Product {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ length: 255 })
   name: string;
 
-  @Column('decimal')
-  price: number;
+  @Column('decimal', { nullable: true })
+  price: number | null;
 
-  @Column()
-  expiration: string;
+  @Column('text', { nullable: true })
+  expiration: string | null;
 
   @Column('json')
   exchangeRates: { [key: string]: number };

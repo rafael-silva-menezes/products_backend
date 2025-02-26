@@ -6,6 +6,7 @@ import {
   Get,
   Query,
   BadRequestException,
+  HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -24,6 +25,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post('upload')
+  @HttpCode(201)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -50,8 +52,7 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    await this.productsService.uploadCsv(file);
-    return { message: 'File uploaded successfully' };
+    return this.productsService.uploadCsv(file);
   }
 
   @Get()

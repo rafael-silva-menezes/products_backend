@@ -26,11 +26,11 @@ export class ProductsService {
       .createReadStream(file.path)
       .pipe(parse({ columns: true, trim: true, delimiter: ';' }));
 
-    let rowIndex = 0; // Para rastrear a linha problemática
+    let rowIndex = 0; // To track the problematic row
     for await (const row of stream) {
       rowIndex++;
 
-      // Verificar se os campos obrigatórios estão presentes e não são vazios
+      // Ensure required fields are present and non-empty
       if (
         !row.name ||
         row.name.trim() === '' ||
@@ -45,7 +45,7 @@ export class ProductsService {
       const product = new Product();
       product.name = row.name.trim();
 
-      // Garantir que price seja um número válido
+      // Ensure that price is a valid number
       const priceStr = row.price.replace('$', '').trim();
       const price = parseFloat(priceStr);
       if (isNaN(price)) {
@@ -55,7 +55,7 @@ export class ProductsService {
       }
       product.price = price;
 
-      // Garantir que expiration seja uma string não vazia
+      // Ensure that expiration is a non-empty string
       product.expiration = row.expiration.trim();
       if (product.expiration === '') {
         throw new BadRequestException(
@@ -74,7 +74,7 @@ export class ProductsService {
     }
 
     await this.productsRepository.save(products, { chunk: 1000 });
-    fs.unlinkSync(file.path); // Remove o arquivo temporário após o processamento
+    fs.unlinkSync(file.path); // Remove the temporary file after processing
   }
 
   async fetchExchangeRates(): Promise<{ [key: string]: number }> {

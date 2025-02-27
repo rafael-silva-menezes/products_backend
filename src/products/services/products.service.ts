@@ -1,44 +1,64 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from '../entities/product.entity';
+import { Product } from './product.entity';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
+import { csvQueue } from '../queues/csv.queue';
+import { Logger } from '@nestjs/common'; // Added for logging
 
 @Injectable()
 export class ProductsService {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
   ) {}
 
-  // Upload CSV with validation, sanitization, and detailed error reporting
+  // Enqueue CSV processing and return job ID
   async uploadCsv(
     file: Express.Multer.File,
-  ): Promise<{ message: string; errors?: string[] }> {
+  ): Promise<{ message: string; jobId: string }> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
+    const job = await csvQueue.add(
+      'process-csv',
+      { filePath: file.path },
+      { priority: 1 }, // Higher priority (1 is highest)
+    );
+
+    this.logger.log(`Job enqueued with ID: ${job.id}`);
+    return {
+      message: 'File upload accepted for processing',
+      jobId: job.id as string,
+    };
+  }
+
+  // Process CSV in the background (called by worker)
+  async processCsv(
+    filePath: string,
+  ): Promise<{ processed: number; errors: string[] }> {
     const products: Product[] = [];
     const exchangeRates = await this.fetchExchangeRates();
     const errors: string[] = [];
-    let rowIndex = 0; // Track row number for error reporting
+    let rowIndex = 0;
 
     const stream = fs
-      .createReadStream(file.path)
+      .createReadStream(filePath)
       .pipe(parse({ columns: true, trim: true, delimiter: ';' }));
 
     for await (const row of stream) {
       rowIndex++;
 
-      // Sanitize and validate row data
       const sanitizedName = sanitizeHtml(row.name || '', {
-        allowedTags: [], // Remove all HTML tags
-        allowedAttributes: {}, // No attributes allowed
+        allowedTags: [],
+        allowedAttributes: {},
       }).trim();
 
       const priceStr = (row.price || '').replace('$', '').trim();
@@ -49,7 +69,7 @@ export class ProductsService {
         errors.push(
           `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
         );
-        continue; // Skip invalid row
+        continue;
       }
       if (isNaN(price) || price < 0) {
         errors.push(
@@ -64,7 +84,6 @@ export class ProductsService {
         continue;
       }
 
-      // Create product if all validations pass
       const product = new Product();
       product.name = sanitizedName;
       product.price = price;
@@ -73,23 +92,15 @@ export class ProductsService {
       products.push(product);
     }
 
-    // Save valid products
     if (products.length > 0) {
       await this.productsRepository.save(products, { chunk: 1000 });
-      console.log(`Saved ${products.length} products successfully`);
-    } else if (errors.length > 0) {
-      throw new BadRequestException({
-        message: 'No valid products to save',
-        errors,
-      });
+      this.logger.log(`Saved ${products.length} products successfully`);
     }
 
-    // Clean up temporary file
-    fs.unlinkSync(file.path);
-
+    fs.unlinkSync(filePath);
     return {
-      message: `File uploaded successfully, processed ${products.length} products`,
-      errors: errors.length > 0 ? errors : undefined,
+      processed: products.length,
+      errors,
     };
   }
 
@@ -140,7 +151,6 @@ export class ProductsService {
     }
   }
 
-  // Fetch products with sanitized and validated query parameters
   async getProducts(
     name?: string,
     price?: number,
@@ -150,55 +160,38 @@ export class ProductsService {
   ): Promise<Product[]> {
     const query = this.productsRepository.createQueryBuilder('product');
 
-    // Sanitize and validate name
     if (name) {
-      const sanitizedName = sanitizeHtml(name, {
-        allowedTags: [],
-        allowedAttributes: {},
-      }).trim();
-      if (!sanitizedName) {
-        throw new BadRequestException(
-          "Query parameter 'name' is invalid after sanitization",
-        );
-      }
-      query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
+      query.andWhere('product.name LIKE :name', { name: `%${name}%` });
     }
-
-    // Validate price
     if (price !== undefined) {
-      if (isNaN(price) || price < 0) {
-        throw new BadRequestException(
-          "Query parameter 'price' must be a valid positive number",
-        );
-      }
       query.andWhere('product.price = :price', { price });
     }
-
-    // Validate expiration
     if (expiration) {
-      if (!this.isValidDate(expiration)) {
-        throw new BadRequestException(
-          "Query parameter 'expiration' must be a valid date (YYYY-MM-DD)",
-        );
-      }
       query.andWhere('product.expiration = :expiration', { expiration });
-    }
-
-    // Validate sortBy and order
-    if (sortBy && !['name', 'price', 'expiration'].includes(sortBy)) {
-      throw new BadRequestException(
-        "Query parameter 'sortBy' must be 'name', 'price', or 'expiration'",
-      );
-    }
-    if (order && !['ASC', 'DESC'].includes(order)) {
-      throw new BadRequestException(
-        "Query parameter 'order' must be 'ASC' or 'DESC'",
-      );
     }
     if (sortBy) {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
     }
 
     return query.getMany();
+  }
+
+  async getUploadStatus(
+    jobId: string,
+  ): Promise<{ status: string; result?: any }> {
+    const job = await csvQueue.getJob(jobId);
+    if (!job) {
+      throw new BadRequestException(`Job ${jobId} not found`);
+    }
+
+    const state = await job.getState();
+    if (state === 'completed') {
+      const result = await job.returnvalue;
+      return { status: 'completed', result };
+    }
+    if (state === 'failed') {
+      return { status: 'failed', result: job.failedReason };
+    }
+    return { status: state };
   }
 }

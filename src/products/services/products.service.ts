@@ -7,8 +7,8 @@ import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
-import { csvQueue } from '../queues/csv.queue'; // Import the queue
-import { Logger } from '@nestjs/common'; // Added for detailed logging
+import { csvQueue } from '../queues/csv.queue';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ProductsService {

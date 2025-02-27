@@ -13,6 +13,7 @@ import { Queue } from 'bullmq';
 import { Processor } from '@nestjs/bullmq';
 import { WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 @Processor('csv-processing')
@@ -23,6 +24,7 @@ export class ProductsService extends WorkerHost {
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
     @InjectQueue('csv-processing') private csvQueue: Queue,
+    private configService: ConfigService,
   ) {
     super();
   }
@@ -39,8 +41,14 @@ export class ProductsService extends WorkerHost {
       { filePath: file.path },
       {
         priority: 1,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
+        attempts: parseInt(this.configService.get('JOB_ATTEMPTS') || '3', 10),
+        backoff: {
+          type: 'exponential',
+          delay: parseInt(
+            this.configService.get('JOB_BACKOFF_DELAY') || '1000',
+            10,
+          ),
+        },
       },
     );
 
@@ -70,7 +78,10 @@ export class ProductsService extends WorkerHost {
 
     const errors: string[] = [];
     let processed = 0;
-    const batchSize = 1000; // Save in batches of 1000
+    const batchSize = parseInt(
+      this.configService.get('BATCH_SIZE') || '1000',
+      10,
+    ); // Usar .env
     let batch: Product[] = [];
     let rowIndex = 0;
 
@@ -81,7 +92,6 @@ export class ProductsService extends WorkerHost {
     try {
       for await (const row of stream) {
         rowIndex++;
-
         try {
           const sanitizedName = sanitizeHtml(row.name || '', {
             allowedTags: [],
@@ -130,11 +140,10 @@ export class ProductsService extends WorkerHost {
           this.logger.error(
             `Error processing row ${rowIndex}: ${rowError.message}`,
           );
-          continue; // Continue processing next row
+          continue;
         }
       }
 
-      // Save any remaining products in the last batch
       if (batch.length > 0) {
         await this.saveBatch(batch, rowIndex, errors);
         processed += batch.length;
@@ -151,13 +160,10 @@ export class ProductsService extends WorkerHost {
       errors.push(
         `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
       );
-      fs.unlinkSync(filePath); // Clean up even on failure
+      fs.unlinkSync(filePath);
     }
 
-    return {
-      processed,
-      errors,
-    };
+    return { processed, errors };
   }
 
   // Helper method to save a batch and handle errors
@@ -192,10 +198,10 @@ export class ProductsService extends WorkerHost {
 
   async fetchExchangeRates(): Promise<{ [key: string]: number }> {
     const primaryUrl =
-      process.env.EXCHANGE_RATE_PRIMARY_URL ||
+      this.configService.get('EXCHANGE_RATE_PRIMARY_URL') ||
       'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
     const fallbackUrl =
-      process.env.EXCHANGE_RATE_FALLBACK_URL ||
+      this.configService.get('EXCHANGE_RATE_FALLBACK_URL') ||
       'https://latest.currency-api.pages.dev/v1/currencies/usd.json';
 
     try {
@@ -303,5 +309,10 @@ export class ProductsService extends WorkerHost {
       return { status: 'failed', result: job.failedReason };
     }
     return { status: state };
+  }
+
+  async getNumProducts(): Promise<number> {
+    const query = this.productsRepository.createQueryBuilder('product');
+    return query.getCount();
   }
 }

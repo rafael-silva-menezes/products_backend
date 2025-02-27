@@ -8,20 +8,25 @@ import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
 import { Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq'; // Import InjectQueue
-import { Queue } from 'bullmq'; // Import Queue type
-import { Processor, Process } from '@nestjs/bullmq'; // Import Processor and Process
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { Processor } from '@nestjs/bullmq';
+import { WorkerHost } from '@nestjs/bullmq'; // Import WorkerHost
+import { Job } from 'bullmq'; // Import Job type
 
 @Injectable()
 @Processor('csv-processing') // Define this service as a processor for the queue
-export class ProductsService {
+export class ProductsService extends WorkerHost {
+  // Extend WorkerHost
   private readonly logger = new Logger(ProductsService.name);
 
   constructor(
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
-    @InjectQueue('csv-processing') private csvQueue: Queue, // Inject the queue
-  ) {}
+    @InjectQueue('csv-processing') private csvQueue: Queue,
+  ) {
+    super(); // Required by WorkerHost
+  }
 
   async uploadCsv(
     file: Express.Multer.File,
@@ -47,10 +52,10 @@ export class ProductsService {
     };
   }
 
-  @Process('process-csv') // Define the job processor
-  async processCsv(job: {
-    data: { filePath: string };
-  }): Promise<{ processed: number; errors: string[] }> {
+  // Default job processor for the 'csv-processing' queue
+  async process(
+    job: Job<{ filePath: string }>,
+  ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV processing for file: ${filePath}`);
     const products: Product[] = [];

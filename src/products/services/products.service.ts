@@ -51,88 +51,134 @@ export class ProductsService extends WorkerHost {
     };
   }
 
-  // Process CSV in stream with incremental saving
+  // Process CSV in stream with incremental saving and error resilience
   async process(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV processing for file: ${filePath}`);
 
-    const exchangeRates = await this.fetchExchangeRates();
+    let exchangeRates: { [key: string]: number };
+    try {
+      exchangeRates = await this.fetchExchangeRates();
+    } catch (error) {
+      this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to fetch exchange rates: ${error.message}`,
+      );
+    }
+
     const errors: string[] = [];
-    let rowIndex = 0;
     let processed = 0;
     const batchSize = 1000; // Save in batches of 1000
     let batch: Product[] = [];
+    let rowIndex = 0;
 
     const stream = fs
       .createReadStream(filePath)
       .pipe(parse({ columns: true, trim: true, delimiter: ';' }));
 
-    for await (const row of stream) {
-      rowIndex++;
+    try {
+      for await (const row of stream) {
+        rowIndex++;
 
-      const sanitizedName = sanitizeHtml(row.name || '', {
-        allowedTags: [],
-        allowedAttributes: {},
-      }).trim();
+        try {
+          const sanitizedName = sanitizeHtml(row.name || '', {
+            allowedTags: [],
+            allowedAttributes: {},
+          }).trim();
 
-      const priceStr = (row.price || '').replace('$', '').trim();
-      const price = parseFloat(priceStr);
-      const expiration = (row.expiration || '').trim();
+          const priceStr = (row.price || '').replace('$', '').trim();
+          const price = parseFloat(priceStr);
+          const expiration = (row.expiration || '').trim();
 
-      if (!sanitizedName) {
-        errors.push(
-          `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
-        );
-        continue;
+          if (!sanitizedName) {
+            errors.push(
+              `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
+            );
+            continue;
+          }
+          if (isNaN(price) || price < 0) {
+            errors.push(
+              `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`,
+            );
+            continue;
+          }
+          if (!this.isValidDate(expiration)) {
+            errors.push(
+              `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`,
+            );
+            continue;
+          }
+
+          const product = new Product();
+          product.name = sanitizedName;
+          product.price = price;
+          product.expiration = expiration;
+          product.exchangeRates = exchangeRates;
+          batch.push(product);
+
+          if (batch.length >= batchSize) {
+            await this.saveBatch(batch, rowIndex, errors);
+            processed += batch.length;
+            batch = [];
+          }
+        } catch (rowError) {
+          errors.push(
+            `Row ${rowIndex}: Processing error - ${rowError.message}`,
+          );
+          this.logger.error(
+            `Error processing row ${rowIndex}: ${rowError.message}`,
+          );
+          continue; // Continue processing next row
+        }
       }
-      if (isNaN(price) || price < 0) {
-        errors.push(
-          `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`,
-        );
-        continue;
-      }
-      if (!this.isValidDate(expiration)) {
-        errors.push(
-          `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`,
-        );
-        continue;
-      }
 
-      const product = new Product();
-      product.name = sanitizedName;
-      product.price = price;
-      product.expiration = expiration;
-      product.exchangeRates = exchangeRates;
-      batch.push(product);
-
-      // Save batch when it reaches batchSize
-      if (batch.length >= batchSize) {
-        await this.productsRepository.save(batch);
+      // Save any remaining products in the last batch
+      if (batch.length > 0) {
+        await this.saveBatch(batch, rowIndex, errors);
         processed += batch.length;
-        this.logger.log(
-          `Saved batch of ${batch.length} products at row ${rowIndex}`,
-        );
-        batch = []; // Reset batch
       }
+
+      fs.unlinkSync(filePath);
+      this.logger.log(
+        `CSV processing completed: ${processed} products, ${errors.length} errors`,
+      );
+    } catch (streamError) {
+      this.logger.error(
+        `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
+      );
+      errors.push(
+        `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
+      );
+      fs.unlinkSync(filePath); // Clean up even on failure
     }
 
-    // Save any remaining products in the last batch
-    if (batch.length > 0) {
-      await this.productsRepository.save(batch);
-      processed += batch.length;
-      this.logger.log(`Saved final batch of ${batch.length} products`);
-    }
-
-    fs.unlinkSync(filePath);
-    this.logger.log(
-      `CSV processing completed: ${processed} products, ${errors.length} errors`,
-    );
     return {
       processed,
       errors,
     };
+  }
+
+  // Helper method to save a batch and handle errors
+  private async saveBatch(
+    batch: Product[],
+    rowIndex: number,
+    errors: string[],
+  ): Promise<void> {
+    try {
+      await this.productsRepository.save(batch);
+      this.logger.log(
+        `Saved batch of ${batch.length} products at row ${rowIndex}`,
+      );
+    } catch (saveError) {
+      this.logger.error(
+        `Failed to save batch at row ${rowIndex}: ${saveError.message}`,
+      );
+      errors.push(
+        `Failed to save batch at row ${rowIndex}: ${saveError.message}`,
+      );
+    }
   }
 
   private isValidDate(dateStr: string): boolean {

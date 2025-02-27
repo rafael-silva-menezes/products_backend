@@ -16,19 +16,23 @@ services:
 
   # app:
   #   build:
-  #     context: . 
+  #     context: .
   #     dockerfile: Dockerfile
   #   ports:
-  #     - '8000:8000' 
+  #     - '8000:8000'
   #   depends_on:
   #     - redis
   #   environment:
   #     - REDIS_HOST=redis
   #     - REDIS_PORT=6379
-  #     - PORT=8000 
+  #     - REDIS_PASSWORD=redis_password
+  #     - PORT=8000
+  #     - CORS_ORIGIN=http://localhost:3000
+  #     - DATABASE_TYPE=sqlite
+  #     - DATABASE_PATH=/usr/src/app/database.sqlite
   #   volumes:
-  #     - .:/usr/src/app 
-  #     - /usr/src/app/node_modules 
+  #     - .:/usr/src/app
+  #     - /usr/src/app/node_modules
 
 volumes:
-  redis-data: 
+  redis-data:

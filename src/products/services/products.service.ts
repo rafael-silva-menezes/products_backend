@@ -1,14 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from './product.entity';
+import { Product } from '../entities/product.entity';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
-import { csvQueue } from '../queues/csv.queue';
-import { Logger } from '@nestjs/common'; // Added for logging
+import { csvQueue } from '../queues/csv.queue'; // Import the queue
+import { Logger } from '@nestjs/common'; // Added for detailed logging
 
 @Injectable()
 export class ProductsService {
@@ -27,13 +27,14 @@ export class ProductsService {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
+    // Enqueue the CSV processing job
     const job = await csvQueue.add(
       'process-csv',
       { filePath: file.path },
-      { priority: 1 }, // Higher priority (1 is highest)
+      { priority: 1 }, // Default priority (1 is highest)
     );
 
-    this.logger.log(`Job enqueued with ID: ${job.id}`);
+    this.logger.log(`CSV upload enqueued with job ID: ${job.id}`);
     return {
       message: 'File upload accepted for processing',
       jobId: job.id as string,
@@ -44,6 +45,7 @@ export class ProductsService {
   async processCsv(
     filePath: string,
   ): Promise<{ processed: number; errors: string[] }> {
+    this.logger.log(`Starting CSV processing for file: ${filePath}`);
     const products: Product[] = [];
     const exchangeRates = await this.fetchExchangeRates();
     const errors: string[] = [];
@@ -95,9 +97,14 @@ export class ProductsService {
     if (products.length > 0) {
       await this.productsRepository.save(products, { chunk: 1000 });
       this.logger.log(`Saved ${products.length} products successfully`);
+    } else if (errors.length > 0) {
+      this.logger.warn('No valid products to save');
     }
 
     fs.unlinkSync(filePath);
+    this.logger.log(
+      `CSV processing completed: ${products.length} products, ${errors.length} errors`,
+    );
     return {
       processed: products.length,
       errors,
@@ -151,6 +158,7 @@ export class ProductsService {
     }
   }
 
+  // Fetch products with sanitized and validated query parameters
   async getProducts(
     name?: string,
     price?: number,
@@ -161,13 +169,45 @@ export class ProductsService {
     const query = this.productsRepository.createQueryBuilder('product');
 
     if (name) {
-      query.andWhere('product.name LIKE :name', { name: `%${name}%` });
+      const sanitizedName = sanitizeHtml(name, {
+        allowedTags: [],
+        allowedAttributes: {},
+      }).trim();
+      if (!sanitizedName) {
+        throw new BadRequestException(
+          "Query parameter 'name' is invalid after sanitization",
+        );
+      }
+      query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
+
     if (price !== undefined) {
+      if (isNaN(price) || price < 0) {
+        throw new BadRequestException(
+          "Query parameter 'price' must be a valid positive number",
+        );
+      }
       query.andWhere('product.price = :price', { price });
     }
+
     if (expiration) {
+      if (!this.isValidDate(expiration)) {
+        throw new BadRequestException(
+          "Query parameter 'expiration' must be a valid date (YYYY-MM-DD)",
+        );
+      }
       query.andWhere('product.expiration = :expiration', { expiration });
+    }
+
+    if (sortBy && !['name', 'price', 'expiration'].includes(sortBy)) {
+      throw new BadRequestException(
+        "Query parameter 'sortBy' must be 'name', 'price', or 'expiration'",
+      );
+    }
+    if (order && !['ASC', 'DESC'].includes(order)) {
+      throw new BadRequestException(
+        "Query parameter 'order' must be 'ASC' or 'DESC'",
+      );
     }
     if (sortBy) {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
@@ -176,6 +216,7 @@ export class ProductsService {
     return query.getMany();
   }
 
+  // Check job status
   async getUploadStatus(
     jobId: string,
   ): Promise<{ status: string; result?: any }> {
@@ -192,6 +233,6 @@ export class ProductsService {
     if (state === 'failed') {
       return { status: 'failed', result: job.failedReason };
     }
-    return { status: state };
+    return { status: state }; // e.g., 'waiting', 'active'
   }
 }

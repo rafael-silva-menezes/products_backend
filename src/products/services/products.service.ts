@@ -122,10 +122,8 @@ export class ProductsService {
   }
 
   async fetchExchangeRates(): Promise<{ [key: string]: number }> {
-    const primaryUrl =
-      'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
-    const fallbackUrl =
-      'https://latest.currency-api.pages.dev/v1/currencies/usd.json';
+    const primaryUrl = process.env.EXCHANGE_RATE_PRIMARY_URL || '';
+    const fallbackUrl = process.env.EXCHANGE_RATE_FALLBACK_URL || '';
 
     try {
       const response = await axios.get(primaryUrl, {

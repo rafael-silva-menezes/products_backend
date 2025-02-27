@@ -78,4 +78,9 @@ export class ProductsController {
   async getUploadStatus(@Param('id') jobId: string) {
     return this.productsService.getUploadStatus(jobId);
   }
+
+  @Get('/number-of-products')
+  async getNumberOfProducts(): Promise<number> {
+    return this.productsService.getNumProducts();
+  }
 }

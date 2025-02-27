@@ -7,16 +7,20 @@ import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
-import { csvQueue } from '../queues/csv.queue';
 import { Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq'; // Import InjectQueue
+import { Queue } from 'bullmq'; // Import Queue type
+import { Processor, Process } from '@nestjs/bullmq'; // Import Processor and Process
 
 @Injectable()
+@Processor('csv-processing') // Define this service as a processor for the queue
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
 
   constructor(
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
+    @InjectQueue('csv-processing') private csvQueue: Queue, // Inject the queue
   ) {}
 
   async uploadCsv(
@@ -26,10 +30,14 @@ export class ProductsService {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
-    const job = await csvQueue.add(
+    const job = await this.csvQueue.add(
       'process-csv',
       { filePath: file.path },
-      { priority: 1 },
+      {
+        priority: 1,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+      },
     );
 
     this.logger.log(`CSV upload enqueued with job ID: ${job.id}`);
@@ -39,9 +47,11 @@ export class ProductsService {
     };
   }
 
-  async processCsv(
-    filePath: string,
-  ): Promise<{ processed: number; errors: string[] }> {
+  @Process('process-csv') // Define the job processor
+  async processCsv(job: {
+    data: { filePath: string };
+  }): Promise<{ processed: number; errors: string[] }> {
+    const { filePath } = job.data;
     this.logger.log(`Starting CSV processing for file: ${filePath}`);
     const products: Product[] = [];
     const exchangeRates = await this.fetchExchangeRates();
@@ -108,7 +118,6 @@ export class ProductsService {
     };
   }
 
-  // Helper to validate date format (YYYY-MM-DD)
   private isValidDate(dateStr: string): boolean {
     const regex = /^\d{4}-\d{2}-\d{2}$/;
     if (!regex.test(dateStr)) return false;
@@ -217,7 +226,7 @@ export class ProductsService {
   async getUploadStatus(
     jobId: string,
   ): Promise<{ status: string; result?: any }> {
-    const job = await csvQueue.getJob(jobId);
+    const job = await this.csvQueue.getJob(jobId);
     if (!job) {
       throw new BadRequestException(`Job ${jobId} not found`);
     }

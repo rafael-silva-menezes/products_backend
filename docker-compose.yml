@@ -14,6 +14,22 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=${DATABASE_USERNAME}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=${DATABASE_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USERNAME}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # app:
   #   build:
   #     context: .
@@ -22,17 +38,29 @@ services:
   #     - '8000:8000'
   #   depends_on:
   #     - redis
+  #     - postgres
   #   environment:
   #     - REDIS_HOST=redis
   #     - REDIS_PORT=6379
   #     - REDIS_PASSWORD=redis_password
   #     - PORT=8000
   #     - CORS_ORIGIN=http://localhost:3000
-  #     - DATABASE_TYPE=sqlite
-  #     - DATABASE_PATH=/usr/src/app/database.sqlite
+  #     - DATABASE_TYPE=postgres
+  #     - DATABASE_HOST=postgres
+  #     - DATABASE_PORT=5432
+  #     - DATABASE_USERNAME=postgres
+  #     - DATABASE_PASSWORD=postgres
+  #     - DATABASE_NAME=products_db
+  #     - BATCH_SIZE=1000
+  #     - JOB_ATTEMPTS=3
+  #     - JOB_BACKOFF_DELAY=1000
+  #     - EXCHANGE_RATE_PRIMARY_URL=https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json
+  #     - EXCHANGE_RATE_FALLBACK_URL=https://latest.currency-api.pages.dev/v1/currencies/usd.json
+  #     - LOG_LEVEL=info
   #   volumes:
   #     - .:/usr/src/app
   #     - /usr/src/app/node_modules
 
 volumes:
   redis-data:
+  postgres-data:

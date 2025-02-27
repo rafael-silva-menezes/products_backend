@@ -12,8 +12,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProductsService } from './products.service';
-import { Product } from './product.entity';
+import { ProductsService } from '../services/products.service';
+import { Product } from '../entities/product.entity';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -25,7 +25,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post('upload')
-  @HttpCode(201)
+  @HttpCode(201) // Explicitly set to 201 for resource creation
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -52,7 +52,7 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.productsService.uploadCsv(file);
+    return this.productsService.uploadCsv(file); // Return detailed response
   }
 
   @Get()
@@ -64,9 +64,6 @@ export class ProductsController {
     @Query('order') order: 'ASC' | 'DESC',
   ): Promise<Product[]> {
     const price = priceStr ? parseFloat(priceStr) : undefined;
-    if (priceStr && isNaN(price as number)) {
-      throw new BadRequestException('Invalid price filter');
-    }
     return this.productsService.getProducts(
       name,
       price,

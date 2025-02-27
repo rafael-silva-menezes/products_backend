@@ -1,12 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from './product.entity';
+import { Product } from '../entities/product.entity';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import * as sanitizeHtml from 'sanitize-html';
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -14,6 +15,7 @@ export class ProductsService {
     private productsRepository: Repository<Product>,
   ) {}
 
+  // Upload CSV with validation, sanitization, and detailed error reporting
   async uploadCsv(
     file: Express.Multer.File,
   ): Promise<{ message: string; errors?: string[] }> {
@@ -43,7 +45,6 @@ export class ProductsService {
       const price = parseFloat(priceStr);
       const expiration = (row.expiration || '').trim();
 
-      // Validation checks
       if (!sanitizedName) {
         errors.push(
           `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
@@ -86,7 +87,6 @@ export class ProductsService {
     // Clean up temporary file
     fs.unlinkSync(file.path);
 
-    // Return response with optional errors
     return {
       message: `File uploaded successfully, processed ${products.length} products`,
       errors: errors.length > 0 ? errors : undefined,
@@ -140,6 +140,7 @@ export class ProductsService {
     }
   }
 
+  // Fetch products with sanitized and validated query parameters
   async getProducts(
     name?: string,
     price?: number,
@@ -149,14 +150,50 @@ export class ProductsService {
   ): Promise<Product[]> {
     const query = this.productsRepository.createQueryBuilder('product');
 
+    // Sanitize and validate name
     if (name) {
-      query.andWhere('product.name LIKE :name', { name: `%${name}%` });
+      const sanitizedName = sanitizeHtml(name, {
+        allowedTags: [],
+        allowedAttributes: {},
+      }).trim();
+      if (!sanitizedName) {
+        throw new BadRequestException(
+          "Query parameter 'name' is invalid after sanitization",
+        );
+      }
+      query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
+
+    // Validate price
     if (price !== undefined) {
+      if (isNaN(price) || price < 0) {
+        throw new BadRequestException(
+          "Query parameter 'price' must be a valid positive number",
+        );
+      }
       query.andWhere('product.price = :price', { price });
     }
+
+    // Validate expiration
     if (expiration) {
+      if (!this.isValidDate(expiration)) {
+        throw new BadRequestException(
+          "Query parameter 'expiration' must be a valid date (YYYY-MM-DD)",
+        );
+      }
       query.andWhere('product.expiration = :expiration', { expiration });
+    }
+
+    // Validate sortBy and order
+    if (sortBy && !['name', 'price', 'expiration'].includes(sortBy)) {
+      throw new BadRequestException(
+        "Query parameter 'sortBy' must be 'name', 'price', or 'expiration'",
+      );
+    }
+    if (order && !['ASC', 'DESC'].includes(order)) {
+      throw new BadRequestException(
+        "Query parameter 'order' must be 'ASC' or 'DESC'",
+      );
     }
     if (sortBy) {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');

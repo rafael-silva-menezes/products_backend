@@ -19,7 +19,6 @@ export class ProductsService {
     private productsRepository: Repository<Product>,
   ) {}
 
-  // Enqueue CSV processing and return job ID
   async uploadCsv(
     file: Express.Multer.File,
   ): Promise<{ message: string; jobId: string }> {
@@ -27,11 +26,10 @@ export class ProductsService {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
-    // Enqueue the CSV processing job
     const job = await csvQueue.add(
       'process-csv',
       { filePath: file.path },
-      { priority: 1 }, // Default priority (1 is highest)
+      { priority: 1 },
     );
 
     this.logger.log(`CSV upload enqueued with job ID: ${job.id}`);
@@ -41,7 +39,6 @@ export class ProductsService {
     };
   }
 
-  // Process CSV in the background (called by worker)
   async processCsv(
     filePath: string,
   ): Promise<{ processed: number; errors: string[] }> {
@@ -156,7 +153,6 @@ export class ProductsService {
     }
   }
 
-  // Fetch products with sanitized and validated query parameters
   async getProducts(
     name?: string,
     price?: number,
@@ -214,7 +210,6 @@ export class ProductsService {
     return query.getMany();
   }
 
-  // Check job status
   async getUploadStatus(
     jobId: string,
   ): Promise<{ status: string; result?: any }> {
@@ -231,6 +226,6 @@ export class ProductsService {
     if (state === 'failed') {
       return { status: 'failed', result: job.failedReason };
     }
-    return { status: state }; // e.g., 'waiting', 'active'
+    return { status: state };
   }
 }

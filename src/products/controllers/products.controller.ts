@@ -7,6 +7,7 @@ import {
   Query,
   BadRequestException,
   HttpCode,
+  Param,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -25,7 +26,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post('upload')
-  @HttpCode(201) // Explicitly set to 201 for resource creation
+  @HttpCode(202)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -52,7 +53,7 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.productsService.uploadCsv(file); // Return detailed response
+    return this.productsService.uploadCsv(file); // Returns { message, jobId }
   }
 
   @Get()
@@ -71,5 +72,10 @@ export class ProductsController {
       sortBy,
       order,
     );
+  }
+
+  @Get('upload-status/:id')
+  async getUploadStatus(@Param('id') jobId: string) {
+    return this.productsService.getUploadStatus(jobId);
   }
 }

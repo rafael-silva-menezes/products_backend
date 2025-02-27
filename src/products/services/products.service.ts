@@ -11,13 +11,12 @@ import { Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Processor } from '@nestjs/bullmq';
-import { WorkerHost } from '@nestjs/bullmq'; // Import WorkerHost
-import { Job } from 'bullmq'; // Import Job type
+import { WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 
 @Injectable()
-@Processor('csv-processing') // Define this service as a processor for the queue
+@Processor('csv-processing')
 export class ProductsService extends WorkerHost {
-  // Extend WorkerHost
   private readonly logger = new Logger(ProductsService.name);
 
   constructor(
@@ -25,7 +24,7 @@ export class ProductsService extends WorkerHost {
     private productsRepository: Repository<Product>,
     @InjectQueue('csv-processing') private csvQueue: Queue,
   ) {
-    super(); // Required by WorkerHost
+    super();
   }
 
   async uploadCsv(
@@ -52,16 +51,19 @@ export class ProductsService extends WorkerHost {
     };
   }
 
-  // Default job processor for the 'csv-processing' queue
+  // Process CSV in stream with incremental saving
   async process(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV processing for file: ${filePath}`);
-    const products: Product[] = [];
+
     const exchangeRates = await this.fetchExchangeRates();
     const errors: string[] = [];
     let rowIndex = 0;
+    let processed = 0;
+    const batchSize = 1000; // Save in batches of 1000
+    let batch: Product[] = [];
 
     const stream = fs
       .createReadStream(filePath)
@@ -103,22 +105,32 @@ export class ProductsService extends WorkerHost {
       product.price = price;
       product.expiration = expiration;
       product.exchangeRates = exchangeRates;
-      products.push(product);
+      batch.push(product);
+
+      // Save batch when it reaches batchSize
+      if (batch.length >= batchSize) {
+        await this.productsRepository.save(batch);
+        processed += batch.length;
+        this.logger.log(
+          `Saved batch of ${batch.length} products at row ${rowIndex}`,
+        );
+        batch = []; // Reset batch
+      }
     }
 
-    if (products.length > 0) {
-      await this.productsRepository.save(products, { chunk: 1000 });
-      this.logger.log(`Saved ${products.length} products successfully`);
-    } else if (errors.length > 0) {
-      this.logger.warn('No valid products to save');
+    // Save any remaining products in the last batch
+    if (batch.length > 0) {
+      await this.productsRepository.save(batch);
+      processed += batch.length;
+      this.logger.log(`Saved final batch of ${batch.length} products`);
     }
 
     fs.unlinkSync(filePath);
     this.logger.log(
-      `CSV processing completed: ${products.length} products, ${errors.length} errors`,
+      `CSV processing completed: ${processed} products, ${errors.length} errors`,
     );
     return {
-      processed: products.length,
+      processed,
       errors,
     };
   }

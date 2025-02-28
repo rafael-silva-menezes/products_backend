@@ -161,7 +161,7 @@ export class ProductsService extends WorkerHost {
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
-        await this.cacheManager.set(cacheKey, exchangeRates, 3600);
+        await this.cacheManager.set(cacheKey, exchangeRates);
         this.logger.log('Fetched and cached exchange rates');
       } catch (error) {
         this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
@@ -353,7 +353,7 @@ export class ProductsService extends WorkerHost {
     }
 
     try {
-      await this.cacheManager.set(cacheKey, exchangeRates, 3600); // TTL como número
+      await this.cacheManager.set(cacheKey, exchangeRates);
       this.logger.log(
         `Successfully cached exchange rates with key: ${cacheKey}`,
       );
@@ -446,7 +446,7 @@ export class ProductsService extends WorkerHost {
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
     try {
-      await this.cacheManager.set(cacheKey, result, 300);
+      await this.cacheManager.set(cacheKey, result);
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
       // Verificar se o valor foi realmente salvo
       const cachedAfterSet = await this.cacheManager.get(cacheKey);

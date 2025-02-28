@@ -8,6 +8,7 @@ import {
   BadRequestException,
   HttpCode,
   Param,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -15,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ProductsService } from '../services/products.service';
 import { Product } from '../entities/product.entity';
+import { GetProductsDto } from '../dto/get-products.dto';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -53,25 +55,14 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.productsService.uploadCsv(file); // Retorna jobId único
+    return this.productsService.uploadCsv(file);
   }
 
   @Get()
   async getProducts(
-    @Query('name') name: string,
-    @Query('price') priceStr: string,
-    @Query('expiration') expiration: string,
-    @Query('sortBy') sortBy: 'name' | 'price' | 'expiration',
-    @Query('order') order: 'ASC' | 'DESC',
-  ): Promise<Product[]> {
-    const price = priceStr ? parseFloat(priceStr) : undefined;
-    return this.productsService.getProducts(
-      name,
-      price,
-      expiration,
-      sortBy,
-      order,
-    );
+    @Query(ValidationPipe) dto: GetProductsDto,
+  ): Promise<{ data: Product[]; total: number }> {
+    return this.productsService.getProducts(dto);
   }
 
   @Get('upload-status/:id')

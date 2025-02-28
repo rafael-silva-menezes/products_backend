@@ -19,7 +19,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as path from 'path';
 
 @Injectable()
-@Processor('csv-processing', { concurrency: 4 })
+@Processor('csv-processing', { concurrency: 8 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
 
@@ -143,7 +143,7 @@ export class ProductsService extends WorkerHost {
     const errors: string[] = [];
     let processed = 0;
     const batchSize = parseInt(
-      this.configService.get('BATCH_SIZE') || '1000',
+      this.configService.get('BATCH_SIZE') || '10000',
       10,
     );
     let batch: Product[] = [];
@@ -214,7 +214,15 @@ export class ProductsService extends WorkerHost {
       }
 
       if (batch.length > 0) {
-        await this.saveBatch(batch, rowIndex, errors);
+        await this.productsRepository.query(
+          `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${batch.map(() => '($1, $2, $3, $4)').join(',')}`,
+          batch.flatMap((p) => [
+            p.name,
+            p.price,
+            p.expiration,
+            JSON.stringify(p.exchangeRates),
+          ]),
+        );
         processed += batch.length;
       }
 

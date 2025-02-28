@@ -161,7 +161,7 @@ export class ProductsService extends WorkerHost {
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
-        await this.cacheManager.set(cacheKey, exchangeRates, 3600);
+        await this.cacheManager.set(cacheKey, exchangeRates, { ttl: 3600 });
         this.logger.log('Fetched and cached exchange rates');
       } catch (error) {
         this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
@@ -307,6 +307,8 @@ export class ProductsService extends WorkerHost {
         `Returning cached exchange rates: ${JSON.stringify(cachedRates).slice(0, 100)}...`,
       );
       return cachedRates;
+    } else {
+      this.logger.log(`No cached exchange rates found for key: ${cacheKey}`);
     }
 
     const primaryUrl =
@@ -350,10 +352,16 @@ export class ProductsService extends WorkerHost {
       }
     }
 
-    await this.cacheManager.set(cacheKey, exchangeRates, 3600);
-    this.logger.log(
-      `Cached exchange rates: ${JSON.stringify(exchangeRates).slice(0, 100)}...`,
-    );
+    try {
+      await this.cacheManager.set(cacheKey, exchangeRates, { ttl: 3600 });
+      this.logger.log(
+        `Successfully cached exchange rates with key: ${cacheKey}`,
+      );
+    } catch (cacheError) {
+      this.logger.error(
+        `Failed to cache exchange rates: ${cacheError.message}`,
+      );
+    }
     return exchangeRates;
   }
 
@@ -438,7 +446,7 @@ export class ProductsService extends WorkerHost {
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
     try {
-      await this.cacheManager.set(cacheKey, result, 300);
+      await this.cacheManager.set(cacheKey, result, { ttl: 300 });
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
     } catch (cacheError) {
       this.logger.error(`Failed to save to cache: ${cacheError.message}`);

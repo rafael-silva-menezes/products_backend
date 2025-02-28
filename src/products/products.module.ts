@@ -16,12 +16,12 @@ import { ProductsController } from './controllers/products.controller';
     }),
     CacheModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: async (configService: ConfigService) => ({
         store: redisStore,
         host: configService.get('REDIS_HOST') || 'localhost',
         port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
         password: configService.get('REDIS_PASSWORD') || undefined,
-        ttl: 3600,
+        ttl: 3600, // TTL padrão em segundos
       }),
       inject: [ConfigService],
     }),

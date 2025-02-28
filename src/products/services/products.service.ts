@@ -343,9 +343,35 @@ export class ProductsService extends WorkerHost {
     limit: number;
     totalPages: number;
   }> {
-    const { name, price, expiration, sortBy, order, limit, page } = dto;
-    const skip = (page - 1) * limit;
+    const {
+      name,
+      price,
+      expiration,
+      sortBy,
+      order,
+      limit = 10,
+      page = 1,
+    } = dto;
 
+    const cacheKey = `products:${JSON.stringify(dto)}`;
+    const cached = await this.cacheManager.get<{
+      data: Product[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(cacheKey);
+    this.logger.log(`Checking cache with key: ${cacheKey}`);
+    if (cached) {
+      this.logger.log(
+        `Returning cached data: ${JSON.stringify(cached).slice(0, 100)}...`,
+      );
+      return cached;
+    } else {
+      this.logger.log(`No cache found for key: ${cacheKey}`);
+    }
+
+    const skip = (page - 1) * limit;
     const query = this.productsRepository.createQueryBuilder('product');
 
     if (name) {
@@ -365,12 +391,17 @@ export class ProductsService extends WorkerHost {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
     }
 
+    // Otimização para páginas altas: usar cursor com ID se possível
     query.skip(skip).take(limit);
 
+    this.logger.log(`Executing query with skip=${skip}, limit=${limit}`);
     const [data, total] = await query.getManyAndCount();
     const totalPages = Math.ceil(total / limit);
+    const result = { data, total, page, limit, totalPages };
 
-    return { data, total, page, limit, totalPages };
+    this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
+    await this.cacheManager.set(cacheKey, result, 300); // 5 minutos
+    return result;
   }
 
   async getUploadStatus(

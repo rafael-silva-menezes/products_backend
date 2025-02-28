@@ -371,7 +371,6 @@ export class ProductsService extends WorkerHost {
       this.logger.log(`No cache found for key: ${cacheKey}`);
     }
 
-    const skip = (page - 1) * limit;
     const query = this.productsRepository.createQueryBuilder('product');
 
     if (name) {
@@ -391,11 +390,30 @@ export class ProductsService extends WorkerHost {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
     }
 
-    // Otimização para páginas altas: usar cursor com ID se possível
-    query.skip(skip).take(limit);
+    // Total sem paginação
+    const totalQuery = query.clone();
+    const total = await totalQuery.getCount();
 
-    this.logger.log(`Executing query with skip=${skip}, limit=${limit}`);
-    const [data, total] = await query.getManyAndCount();
+    // Usar cursor com id para eficiência
+    if (page > 1) {
+      const previousPageOffset = (page - 1) * limit;
+      const lastIdPreviousPage = await this.productsRepository
+        .createQueryBuilder('product')
+        .select('product.id')
+        .orderBy('product.id', 'ASC')
+        .skip(previousPageOffset - 1)
+        .take(1)
+        .getOne();
+      if (lastIdPreviousPage) {
+        query.andWhere('product.id > :lastId', {
+          lastId: lastIdPreviousPage.id,
+        });
+      }
+    }
+    query.take(limit);
+
+    this.logger.log(`Executing query with limit=${limit}, page=${page}`);
+    const data = await query.getMany();
     const totalPages = Math.ceil(total / limit);
     const result = { data, total, page, limit, totalPages };
 

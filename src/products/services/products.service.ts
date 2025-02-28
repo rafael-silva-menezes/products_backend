@@ -26,6 +26,7 @@ import { GetProductsDto } from '../dto/get-products.dto';
 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
+  private cacheStats = { hits: 0, misses: 0 }; // Monitoramento do cache
 
   constructor(
     @InjectRepository(Product)
@@ -35,6 +36,30 @@ export class ProductsService extends WorkerHost {
     private configService: ConfigService,
   ) {
     super();
+    // Reportar estatísticas do cache periodicamente (ex.: a cada 5 minutos)
+    setInterval(() => this.reportCacheStats(), 5 * 60 * 1000);
+  }
+
+  // Monitoramento: Reportar estatísticas do cache
+  private reportCacheStats(): void {
+    this.logger.log(
+      `Cache Stats: Hits=${this.cacheStats.hits}, Misses=${this.cacheStats.misses}, Hit Rate=${(
+        (this.cacheStats.hits /
+          (this.cacheStats.hits + this.cacheStats.misses) || 0) * 100
+      ).toFixed(2)}%`,
+    );
+  }
+
+  // Invalidação: Limpar cache específico
+  private async invalidateCache(key: string): Promise<void> {
+    try {
+      await this.cacheManager.del(key);
+      this.logger.log(`Cache invalidated for key: ${key}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to invalidate cache for key ${key}: ${error.message}`,
+      );
+    }
   }
 
   async uploadCsv(
@@ -158,11 +183,20 @@ export class ProductsService extends WorkerHost {
     if (cachedRates) {
       exchangeRates = cachedRates;
       this.logger.log('Using cached exchange rates');
+      this.cacheStats.hits++;
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
-        await this.cacheManager.set(cacheKey, exchangeRates);
+        await this.cacheManager.set(
+          cacheKey,
+          exchangeRates,
+          parseInt(
+            this.configService.get('CACHE_TTL_EXCHANGE_RATES') || '3600',
+            10,
+          ),
+        );
         this.logger.log('Fetched and cached exchange rates');
+        this.cacheStats.misses++;
       } catch (error) {
         this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
         throw new BadRequestException(
@@ -247,6 +281,9 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `CSV chunk processing completed: ${processed} products, ${errors.length} errors`,
       );
+
+      // Invalidar cache de produtos após processamento bem-sucedido
+      await this.invalidateCache('products:*'); // Usa wildcard para invalidar todas as chaves de produtos
     } catch (streamError) {
       this.logger.error(
         `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
@@ -306,9 +343,11 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `Returning cached exchange rates: ${JSON.stringify(cachedRates).slice(0, 100)}...`,
       );
+      this.cacheStats.hits++;
       return cachedRates;
     } else {
       this.logger.log(`No cached exchange rates found for key: ${cacheKey}`);
+      this.cacheStats.misses++;
     }
 
     const primaryUrl =
@@ -353,13 +392,26 @@ export class ProductsService extends WorkerHost {
     }
 
     try {
-      await this.cacheManager.set(cacheKey, exchangeRates);
+      const ttl = parseInt(
+        this.configService.get('CACHE_TTL_EXCHANGE_RATES') || '3600',
+        10,
+      );
+      await this.cacheManager.set(cacheKey, exchangeRates, ttl);
       this.logger.log(
-        `Successfully cached exchange rates with key: ${cacheKey}`,
+        `Successfully cached exchange rates with key: ${cacheKey} (TTL: ${ttl}s)`,
       );
     } catch (cacheError) {
       this.logger.error(
         `Failed to cache exchange rates: ${cacheError.message}`,
+      );
+      // Fallback: Tentar novamente sem Redis, usar memória local temporariamente
+      const fallbackTtl = parseInt(
+        this.configService.get('CACHE_FALLBACK_TTL') || '300',
+        10,
+      );
+      await this.cacheManager.set(cacheKey, exchangeRates, fallbackTtl);
+      this.logger.warn(
+        `Falling back to local memory cache for key: ${cacheKey} (TTL: ${fallbackTtl}s)`,
       );
     }
     return exchangeRates;
@@ -381,7 +433,6 @@ export class ProductsService extends WorkerHost {
       limit = 10,
       page = 1,
     } = dto;
-
     const cacheKey = `products:${JSON.stringify(dto)}`;
     const cached = await this.cacheManager.get<{
       data: Product[];
@@ -395,13 +446,14 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `Returning cached data: ${JSON.stringify(cached).slice(0, 100)}...`,
       );
+      this.cacheStats.hits++;
       return cached;
     } else {
       this.logger.log(`No cache found for key: ${cacheKey}`);
+      this.cacheStats.misses++;
     }
 
     const query = this.productsRepository.createQueryBuilder('product');
-
     if (name) {
       const sanitizedName = sanitizeHtml(name, {
         allowedTags: [],
@@ -409,15 +461,12 @@ export class ProductsService extends WorkerHost {
       }).trim();
       query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
-    if (price !== undefined) {
+    if (price !== undefined)
       query.andWhere('product.price = :price', { price });
-    }
-    if (expiration) {
+    if (expiration)
       query.andWhere('product.expiration = :expiration', { expiration });
-    }
-    if (sortBy) {
+    if (sortBy)
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
-    }
 
     const totalQuery = query.clone();
     const total = await totalQuery.getCount();
@@ -446,15 +495,29 @@ export class ProductsService extends WorkerHost {
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
     try {
-      await this.cacheManager.set(cacheKey, result);
-      this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
-      // Verificar se o valor foi realmente salvo
+      const ttl = parseInt(
+        this.configService.get('CACHE_TTL_PRODUCTS') || '3600',
+        10,
+      );
+      await this.cacheManager.set(cacheKey, result, ttl);
+      this.logger.log(
+        `Successfully saved to cache with key: ${cacheKey} (TTL: ${ttl}s)`,
+      );
       const cachedAfterSet = await this.cacheManager.get(cacheKey);
       this.logger.log(
         `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,
       );
     } catch (cacheError) {
       this.logger.error(`Failed to save to cache: ${cacheError.message}`);
+      // Fallback: Tentar novamente sem Redis
+      const fallbackTtl = parseInt(
+        this.configService.get('CACHE_FALLBACK_TTL') || '300',
+        10,
+      );
+      await this.cacheManager.set(cacheKey, result, fallbackTtl);
+      this.logger.warn(
+        `Falling back to local memory cache for key: ${cacheKey} (TTL: ${fallbackTtl}s)`,
+      );
     }
     return result;
   }

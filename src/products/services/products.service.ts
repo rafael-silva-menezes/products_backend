@@ -149,13 +149,21 @@ export class ProductsService extends WorkerHost {
     let batch: Product[] = [];
     let rowIndex = 0;
 
-    const stream = fs
-      .createReadStream(filePath)
-      .pipe(parse({ columns: true, trim: true, delimiter: ';' }));
+    // Definir cabeçalhos explicitamente
+    const stream = fs.createReadStream(filePath).pipe(
+      parse({
+        delimiter: ';',
+        columns: ['name', 'price', 'expiration'], // Mapeamento explícito
+        trim: true,
+        quote: '"', // Suporte a valores entre aspas
+      }),
+    );
 
     try {
       for await (const row of stream) {
         rowIndex++;
+        this.logger.debug(`Raw row ${rowIndex}: ${JSON.stringify(row)}`); // Logar o row bruto
+
         try {
           const sanitizedName = sanitizeHtml(row.name || '', {
             allowedTags: [],
@@ -168,19 +176,19 @@ export class ProductsService extends WorkerHost {
 
           if (!sanitizedName) {
             const errorMsg = `Row ${rowIndex}: 'name' is missing or empty after sanitization`;
-            this.logger.error(errorMsg); // Logar erro específico
+            this.logger.error(errorMsg);
             errors.push(errorMsg);
             continue;
           }
           if (isNaN(price) || price < 0) {
             const errorMsg = `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`;
-            this.logger.error(errorMsg); // Logar erro específico
+            this.logger.error(errorMsg);
             errors.push(errorMsg);
             continue;
           }
           if (!this.isValidDate(expiration)) {
             const errorMsg = `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
-            this.logger.error(errorMsg); // Logar erro específico
+            this.logger.error(errorMsg);
             errors.push(errorMsg);
             continue;
           }
@@ -199,7 +207,7 @@ export class ProductsService extends WorkerHost {
           }
         } catch (rowError) {
           const errorMsg = `Row ${rowIndex}: Processing error - ${rowError.message}`;
-          this.logger.error(errorMsg); // Logar erro específico
+          this.logger.error(errorMsg);
           errors.push(errorMsg);
           continue;
         }

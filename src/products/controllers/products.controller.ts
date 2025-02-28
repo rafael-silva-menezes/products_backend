@@ -53,7 +53,7 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.productsService.uploadCsv(file); // Returns { message, jobId }
+    return this.productsService.uploadCsv(file); // Agora retorna { message, jobIds }
   }
 
   @Get()

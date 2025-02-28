@@ -19,7 +19,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as path from 'path';
 
 @Injectable()
-@Processor('csv-processing', { concurrency: 8 })
+@Processor('csv-processing', {
+  concurrency: 4,
+  limiter: { max: 2, duration: 1000 },
+})
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
 
@@ -35,10 +38,31 @@ export class ProductsService extends WorkerHost {
 
   async uploadCsv(
     file: Express.Multer.File,
-  ): Promise<{ message: string; jobIds: string[] }> {
+  ): Promise<{ message: string; jobId: string }> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
+
+    const job = await this.csvQueue.add(
+      'split-csv',
+      { filePath: file.path },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+      },
+    );
+
+    this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
+    return {
+      message: 'File upload accepted for processing',
+      jobId: job.id as string,
+    };
+  }
+
+  @Process('split-csv')
+  async process(job: Job<{ filePath: string }>): Promise<{ jobIds: string[] }> {
+    const { filePath } = job.data;
+    this.logger.log(`Starting CSV split for file: ${filePath}`);
 
     const chunkSize = parseInt(
       this.configService.get('CHUNK_SIZE') || '1000000',
@@ -54,7 +78,7 @@ export class ProductsService extends WorkerHost {
     let writeStream: fs.WriteStream | undefined;
 
     const stream = fs
-      .createReadStream(file.path)
+      .createReadStream(filePath)
       .pipe(parse({ delimiter: ';' }));
 
     for await (const row of stream) {
@@ -89,9 +113,9 @@ export class ProductsService extends WorkerHost {
       jobs.push(await this.enqueueChunk(chunkPath));
     }
 
-    fs.unlinkSync(file.path);
+    fs.unlinkSync(filePath);
     this.logger.log(`CSV split into ${jobs.length} chunks and enqueued`);
-    return { message: 'File upload accepted for processing', jobIds: jobs };
+    return { jobIds: jobs };
   }
 
   private async enqueueChunk(chunkPath: string): Promise<string> {
@@ -100,20 +124,15 @@ export class ProductsService extends WorkerHost {
       { filePath: chunkPath },
       {
         priority: 1,
-        attempts: parseInt(this.configService.get('JOB_ATTEMPTS') || '3', 10),
-        backoff: {
-          type: 'exponential',
-          delay: parseInt(
-            this.configService.get('JOB_BACKOFF_DELAY') || '1000',
-            10,
-          ),
-        },
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
       },
     );
     return job.id as string;
   }
 
-  async process(
+  @Process('process-csv-chunk')
+  async processChunk(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;
@@ -142,28 +161,22 @@ export class ProductsService extends WorkerHost {
 
     const errors: string[] = [];
     let processed = 0;
-    const batchSize = parseInt(
-      this.configService.get('BATCH_SIZE') || '10000',
-      10,
-    );
+    const batchSize = 10000;
     let batch: Product[] = [];
     let rowIndex = 0;
 
-    // Definir cabeçalhos explicitamente
     const stream = fs.createReadStream(filePath).pipe(
       parse({
         delimiter: ';',
-        columns: ['name', 'price', 'expiration'], // Mapeamento explícito
+        columns: ['name', 'price', 'expiration'],
         trim: true,
-        quote: '"', // Suporte a valores entre aspas
+        quote: '"',
       }),
     );
 
     try {
       for await (const row of stream) {
         rowIndex++;
-        this.logger.debug(`Raw row ${rowIndex}: ${JSON.stringify(row)}`); // Logar o row bruto
-
         try {
           const sanitizedName = sanitizeHtml(row.name || '', {
             allowedTags: [],
@@ -214,15 +227,7 @@ export class ProductsService extends WorkerHost {
       }
 
       if (batch.length > 0) {
-        await this.productsRepository.query(
-          `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${batch.map(() => '($1, $2, $3, $4)').join(',')}`,
-          batch.flatMap((p) => [
-            p.name,
-            p.price,
-            p.expiration,
-            JSON.stringify(p.exchangeRates),
-          ]),
-        );
+        await this.saveBatch(batch, rowIndex, errors);
         processed += batch.length;
       }
 
@@ -250,7 +255,7 @@ export class ProductsService extends WorkerHost {
   ): Promise<void> {
     try {
       await this.productsRepository.query(
-        `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${batch.map(() => '($1, $2, $3, $4)').join(',')}`,
+        `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${batch.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',')}`,
         batch.flatMap((p) => [
           p.name,
           p.price,

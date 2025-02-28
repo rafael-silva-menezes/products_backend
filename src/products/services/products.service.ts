@@ -298,6 +298,17 @@ export class ProductsService extends WorkerHost {
   }
 
   async fetchExchangeRates(): Promise<{ [key: string]: number }> {
+    const cacheKey = 'exchange_rates';
+    const cachedRates = await this.cacheManager.get<{ [key: string]: number }>(
+      cacheKey,
+    );
+    if (cachedRates) {
+      this.logger.log(
+        `Returning cached exchange rates: ${JSON.stringify(cachedRates).slice(0, 100)}...`,
+      );
+      return cachedRates;
+    }
+
     const primaryUrl =
       this.configService.get('EXCHANGE_RATE_PRIMARY_URL') ||
       'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
@@ -305,12 +316,13 @@ export class ProductsService extends WorkerHost {
       this.configService.get('EXCHANGE_RATE_FALLBACK_URL') ||
       'https://latest.currency-api.pages.dev/v1/currencies/usd.json';
 
+    let exchangeRates: { [key: string]: number };
     try {
       const response = await axios.get(primaryUrl, {
         httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       });
       const rates = response.data.usd;
-      return {
+      exchangeRates = {
         USD: rates.usd || 1,
         EUR: rates.eur,
         GBP: rates.gbp,
@@ -323,7 +335,7 @@ export class ProductsService extends WorkerHost {
           httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         });
         const rates = response.data.usd;
-        return {
+        exchangeRates = {
           USD: rates.usd || 1,
           EUR: rates.eur,
           GBP: rates.gbp,
@@ -331,9 +343,18 @@ export class ProductsService extends WorkerHost {
           BRL: rates.brl,
         };
       } catch (fallbackError) {
+        this.logger.error(
+          `Failed to fetch exchange rates: ${fallbackError.message}`,
+        );
         throw new BadRequestException('Failed to fetch exchange rates');
       }
     }
+
+    await this.cacheManager.set(cacheKey, exchangeRates, 3600);
+    this.logger.log(
+      `Cached exchange rates: ${JSON.stringify(exchangeRates).slice(0, 100)}...`,
+    );
+    return exchangeRates;
   }
 
   async getProducts(dto: GetProductsDto): Promise<{
@@ -390,11 +411,9 @@ export class ProductsService extends WorkerHost {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
     }
 
-    // Total sem paginação
     const totalQuery = query.clone();
     const total = await totalQuery.getCount();
 
-    // Usar cursor com id para eficiência
     if (page > 1) {
       const previousPageOffset = (page - 1) * limit;
       const lastIdPreviousPage = await this.productsRepository
@@ -418,7 +437,12 @@ export class ProductsService extends WorkerHost {
     const result = { data, total, page, limit, totalPages };
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
-    await this.cacheManager.set(cacheKey, result, 300); // 5 minutos
+    try {
+      await this.cacheManager.set(cacheKey, result, 300);
+      this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
+    } catch (cacheError) {
+      this.logger.error(`Failed to save to cache: ${cacheError.message}`);
+    }
     return result;
   }
 

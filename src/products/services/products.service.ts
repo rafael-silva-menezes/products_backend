@@ -31,8 +31,8 @@ export class ProductsService extends WorkerHost {
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
     @InjectQueue('csv-processing') private csvQueue: Queue,
-    private configService: ConfigService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private configService: ConfigService,
   ) {
     super();
   }

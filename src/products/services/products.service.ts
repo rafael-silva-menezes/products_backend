@@ -44,14 +44,15 @@ export class ProductsService extends WorkerHost {
       this.configService.get('CHUNK_SIZE') || '1000000',
       10,
     );
-    const chunkDir = path.join(__dirname, '../../uploads/chunks');
-    if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir);
+    // Caminho absoluto para a raiz do projeto + uploads/chunks
+    const chunkDir = path.join(process.cwd(), 'uploads', 'chunks');
+    fs.mkdirSync(chunkDir, { recursive: true }); // Criar diretório recursivamente
 
     const jobs: string[] = [];
     let lineCount = 0;
     let chunkIndex = 0;
     let currentChunk: string[] = [];
-    let writeStream: fs.WriteStream | undefined; // Inicializado como undefined
+    let writeStream: fs.WriteStream | undefined;
 
     const stream = fs
       .createReadStream(file.path)
@@ -82,7 +83,7 @@ export class ProductsService extends WorkerHost {
       }
 
       currentChunk.push(rowString);
-      writeStream!.write(rowString + '\n'); // Usar ! pois writeStream é garantido após a inicialização
+      writeStream!.write(rowString + '\n');
       lineCount++;
     }
 
@@ -93,7 +94,7 @@ export class ProductsService extends WorkerHost {
       jobs.push(await this.enqueueChunk(chunkPath));
     }
 
-    fs.unlinkSync(file.path); // Remove o arquivo original
+    fs.unlinkSync(file.path);
     this.logger.log(`CSV split into ${jobs.length} chunks and enqueued`);
     return { message: 'File upload accepted for processing', jobIds: jobs };
   }

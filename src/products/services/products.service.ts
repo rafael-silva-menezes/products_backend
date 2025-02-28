@@ -14,9 +14,12 @@ import { Processor } from '@nestjs/bullmq';
 import { WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { Cache } from 'cache-manager';
+import { CACHE_MANAGER, Inject } from '@nestjs/cache-manager';
+import * as path from 'path';
 
 @Injectable()
-@Processor('csv-processing')
+@Processor('csv-processing', { concurrency: 4 }) // Aumentar concorrência
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
 
@@ -25,20 +28,76 @@ export class ProductsService extends WorkerHost {
     private productsRepository: Repository<Product>,
     @InjectQueue('csv-processing') private csvQueue: Queue,
     private configService: ConfigService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {
     super();
   }
 
   async uploadCsv(
     file: Express.Multer.File,
-  ): Promise<{ message: string; jobId: string }> {
+  ): Promise<{ message: string; jobIds: string[] }> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
 
+    const chunkSize = parseInt(
+      this.configService.get('CHUNK_SIZE') || '1000000',
+      10,
+    );
+    const chunkDir = path.join(__dirname, '../../uploads/chunks');
+    if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir);
+
+    const jobs: string[] = [];
+    let lineCount = 0;
+    let chunkIndex = 0;
+    let currentChunk: string[] = [];
+    let writeStream: fs.WriteStream;
+
+    const stream = fs
+      .createReadStream(file.path)
+      .pipe(parse({ delimiter: ';' }));
+
+    for await (const row of stream) {
+      if (lineCount === 0) {
+        // Header row
+        currentChunk.push(row.join(';'));
+        lineCount++;
+        continue;
+      }
+
+      if (lineCount % chunkSize === 1) {
+        if (writeStream) {
+          writeStream.end();
+          const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
+          jobs.push(await this.enqueueChunk(chunkPath));
+          chunkIndex++;
+        }
+        currentChunk = [currentChunk[0]]; // Include header
+        writeStream = fs.createWriteStream(
+          path.join(chunkDir, `chunk-${chunkIndex}.csv`),
+        );
+      }
+
+      currentChunk.push(row.join(';'));
+      writeStream.write(row.join(';') + '\n');
+      lineCount++;
+    }
+
+    if (currentChunk.length > 1) {
+      writeStream.end();
+      const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
+      jobs.push(await this.enqueueChunk(chunkPath));
+    }
+
+    fs.unlinkSync(file.path); // Remove o arquivo original
+    this.logger.log(`CSV split into ${jobs.length} chunks and enqueued`);
+    return { message: 'File upload accepted for processing', jobIds: jobs };
+  }
+
+  private async enqueueChunk(chunkPath: string): Promise<string> {
     const job = await this.csvQueue.add(
-      'process-csv',
-      { filePath: file.path },
+      'process-csv-chunk',
+      { filePath: chunkPath },
       {
         priority: 1,
         attempts: parseInt(this.configService.get('JOB_ATTEMPTS') || '3', 10),
@@ -51,29 +110,34 @@ export class ProductsService extends WorkerHost {
         },
       },
     );
-
-    this.logger.log(`CSV upload enqueued with job ID: ${job.id}`);
-    return {
-      message: 'File upload accepted for processing',
-      jobId: job.id as string,
-    };
+    return job.id as string;
   }
 
-  // Process CSV in stream with incremental saving and error resilience
   async process(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;
-    this.logger.log(`Starting CSV processing for file: ${filePath}`);
+    this.logger.log(`Starting CSV chunk processing for file: ${filePath}`);
 
     let exchangeRates: { [key: string]: number };
-    try {
-      exchangeRates = await this.fetchExchangeRates();
-    } catch (error) {
-      this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
-      throw new BadRequestException(
-        `Failed to fetch exchange rates: ${error.message}`,
-      );
+    const cacheKey = 'exchange_rates';
+    const cachedRates = await this.cacheManager.get<{ [key: string]: number }>(
+      cacheKey,
+    );
+    if (cachedRates) {
+      exchangeRates = cachedRates;
+      this.logger.log('Using cached exchange rates');
+    } else {
+      try {
+        exchangeRates = await this.fetchExchangeRates();
+        await this.cacheManager.set(cacheKey, exchangeRates, 3600); // Cache por 1 hora
+        this.logger.log('Fetched and cached exchange rates');
+      } catch (error) {
+        this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
+        throw new BadRequestException(
+          `Failed to fetch exchange rates: ${error.message}`,
+        );
+      }
     }
 
     const errors: string[] = [];
@@ -81,7 +145,7 @@ export class ProductsService extends WorkerHost {
     const batchSize = parseInt(
       this.configService.get('BATCH_SIZE') || '1000',
       10,
-    ); // Usar .env
+    );
     let batch: Product[] = [];
     let rowIndex = 0;
 
@@ -151,7 +215,7 @@ export class ProductsService extends WorkerHost {
 
       fs.unlinkSync(filePath);
       this.logger.log(
-        `CSV processing completed: ${processed} products, ${errors.length} errors`,
+        `CSV chunk processing completed: ${processed} products, ${errors.length} errors`,
       );
     } catch (streamError) {
       this.logger.error(
@@ -166,7 +230,6 @@ export class ProductsService extends WorkerHost {
     return { processed, errors };
   }
 
-  // Helper method to save a batch and handle errors
   private async saveBatch(
     batch: Product[],
     rowIndex: number,
@@ -309,10 +372,5 @@ export class ProductsService extends WorkerHost {
       return { status: 'failed', result: job.failedReason };
     }
     return { status: state };
-  }
-
-  async getNumProducts(): Promise<number> {
-    const query = this.productsRepository.createQueryBuilder('product');
-    return query.getCount();
   }
 }

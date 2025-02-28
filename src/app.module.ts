@@ -6,6 +6,7 @@ import { redisStore } from 'cache-manager-redis-store';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ProductsModule } from './products/products.module';
 import { AppDataSource } from './config/data-source';
+import { Logger } from '@nestjs/common';
 
 @Module({
   imports: [
@@ -32,18 +33,23 @@ import { AppDataSource } from './config/data-source';
       }),
       inject: [ConfigService],
     }),
-    CacheModule.register({
+    CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService) => {
+        const logger = new Logger('CacheModule');
         const redisConfig = {
           store: redisStore,
-          host: String(configService.get('REDIS_HOST')) || 'localhost',
-          port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
-          password: String(configService.get('REDIS_PASSWORD')) || undefined,
-          ttl: 3600,
+          socket: {
+            host: configService.get('REDIS_HOST') || 'localhost',
+            port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
+          },
+          password: configService.get('REDIS_PASSWORD') || undefined,
+          ttl: parseInt(configService.get('CACHE_TTL_PRODUCTS') || '3600', 10), // TTL padrão configurável
         };
-        console.log('CacheModule initialized with Redis config:', redisConfig);
+        logger.log(
+          `Initializing CacheModule with Redis config: ${JSON.stringify(redisConfig)}`,
+        );
         return redisConfig;
       },
       inject: [ConfigService],

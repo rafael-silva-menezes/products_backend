@@ -446,8 +446,13 @@ export class ProductsService extends WorkerHost {
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
     try {
-      await this.cacheManager.set(cacheKey, result, 300); // TTL como número
+      await this.cacheManager.set(cacheKey, result, 300);
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
+      // Verificar se o valor foi realmente salvo
+      const cachedAfterSet = await this.cacheManager.get(cacheKey);
+      this.logger.log(
+        `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,
+      );
     } catch (cacheError) {
       this.logger.error(`Failed to save to cache: ${cacheError.message}`);
     }

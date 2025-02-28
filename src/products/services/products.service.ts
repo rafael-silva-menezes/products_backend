@@ -44,9 +44,8 @@ export class ProductsService extends WorkerHost {
       this.configService.get('CHUNK_SIZE') || '1000000',
       10,
     );
-    // Caminho absoluto para a raiz do projeto + uploads/chunks
     const chunkDir = path.join(process.cwd(), 'uploads', 'chunks');
-    fs.mkdirSync(chunkDir, { recursive: true }); // Criar diretório recursivamente
+    fs.mkdirSync(chunkDir, { recursive: true });
 
     const jobs: string[] = [];
     let lineCount = 0;
@@ -61,22 +60,19 @@ export class ProductsService extends WorkerHost {
     for await (const row of stream) {
       const rowString = row.join(';');
       if (lineCount === 0) {
-        // Header row
         currentChunk.push(rowString);
         lineCount++;
         continue;
       }
 
       if (lineCount % chunkSize === 1) {
-        // Finalizar o chunk anterior, se existir
         if (writeStream) {
           writeStream.end();
           const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
           jobs.push(await this.enqueueChunk(chunkPath));
           chunkIndex++;
         }
-        // Iniciar novo chunk com o header
-        currentChunk = [currentChunk[0]]; // Header
+        currentChunk = [currentChunk[0]];
         writeStream = fs.createWriteStream(
           path.join(chunkDir, `chunk-${chunkIndex}.csv`),
         );
@@ -87,7 +83,6 @@ export class ProductsService extends WorkerHost {
       lineCount++;
     }
 
-    // Finalizar o último chunk, se houver linhas
     if (currentChunk.length > 1 && writeStream) {
       writeStream.end();
       const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
@@ -172,21 +167,21 @@ export class ProductsService extends WorkerHost {
           const expiration = (row.expiration || '').trim();
 
           if (!sanitizedName) {
-            errors.push(
-              `Row ${rowIndex}: 'name' is missing or empty after sanitization`,
-            );
+            const errorMsg = `Row ${rowIndex}: 'name' is missing or empty after sanitization`;
+            this.logger.error(errorMsg); // Logar erro específico
+            errors.push(errorMsg);
             continue;
           }
           if (isNaN(price) || price < 0) {
-            errors.push(
-              `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`,
-            );
+            const errorMsg = `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`;
+            this.logger.error(errorMsg); // Logar erro específico
+            errors.push(errorMsg);
             continue;
           }
           if (!this.isValidDate(expiration)) {
-            errors.push(
-              `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`,
-            );
+            const errorMsg = `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
+            this.logger.error(errorMsg); // Logar erro específico
+            errors.push(errorMsg);
             continue;
           }
 
@@ -203,12 +198,9 @@ export class ProductsService extends WorkerHost {
             batch = [];
           }
         } catch (rowError) {
-          errors.push(
-            `Row ${rowIndex}: Processing error - ${rowError.message}`,
-          );
-          this.logger.error(
-            `Error processing row ${rowIndex}: ${rowError.message}`,
-          );
+          const errorMsg = `Row ${rowIndex}: Processing error - ${rowError.message}`;
+          this.logger.error(errorMsg); // Logar erro específico
+          errors.push(errorMsg);
           continue;
         }
       }

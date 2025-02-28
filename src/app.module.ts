@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-store';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ProductsModule } from './products/products.module';
 import { AppDataSource } from './config/data-source';
@@ -28,6 +30,22 @@ import { AppDataSource } from './config/data-source';
           password: configService.get('REDIS_PASSWORD') || undefined,
         },
       }),
+      inject: [ConfigService],
+    }),
+    CacheModule.register({
+      isGlobal: true,
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => {
+        const redisConfig = {
+          store: redisStore,
+          host: String(configService.get('REDIS_HOST')) || 'localhost',
+          port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
+          password: String(configService.get('REDIS_PASSWORD')) || undefined,
+          ttl: 3600,
+        };
+        console.log('CacheModule initialized with Redis config:', redisConfig);
+        return redisConfig;
+      },
       inject: [ConfigService],
     }),
     ProductsModule,

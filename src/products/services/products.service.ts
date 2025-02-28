@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as path from 'path';
+import { GetProductsDto } from '../dto/get-products.dto';
 
 @Injectable()
 @Processor('csv-processing', {
@@ -336,60 +337,31 @@ export class ProductsService extends WorkerHost {
   }
 
   async getProducts(
-    name?: string,
-    price?: number,
-    expiration?: string,
-    sortBy?: 'name' | 'price' | 'expiration',
-    order?: 'ASC' | 'DESC',
-  ): Promise<Product[]> {
+    dto: GetProductsDto,
+  ): Promise<{ data: Product[]; total: number }> {
+    const { name, price, expiration, sortBy, order, limit, page } = dto;
+    const skip = (page - 1) * limit;
+
     const query = this.productsRepository.createQueryBuilder('product');
 
     if (name) {
-      const sanitizedName = sanitizeHtml(name, {
-        allowedTags: [],
-        allowedAttributes: {},
-      }).trim();
-      if (!sanitizedName) {
-        throw new BadRequestException(
-          "Query parameter 'name' is invalid after sanitization",
-        );
-      }
-      query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
+      query.andWhere('product.name LIKE :name', { name: `%${name}%` });
     }
-
     if (price !== undefined) {
-      if (isNaN(price) || price < 0) {
-        throw new BadRequestException(
-          "Query parameter 'price' must be a valid positive number",
-        );
-      }
       query.andWhere('product.price = :price', { price });
     }
-
     if (expiration) {
-      if (!this.isValidDate(expiration)) {
-        throw new BadRequestException(
-          "Query parameter 'expiration' must be a valid date (YYYY-MM-DD)",
-        );
-      }
       query.andWhere('product.expiration = :expiration', { expiration });
-    }
-
-    if (sortBy && !['name', 'price', 'expiration'].includes(sortBy)) {
-      throw new BadRequestException(
-        "Query parameter 'sortBy' must be 'name', 'price', or 'expiration'",
-      );
-    }
-    if (order && !['ASC', 'DESC'].includes(order)) {
-      throw new BadRequestException(
-        "Query parameter 'order' must be 'ASC' or 'DESC'",
-      );
     }
     if (sortBy) {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
     }
 
-    return query.getMany();
+    query.skip(skip).take(limit);
+
+    const [data, total] = await query.getManyAndCount();
+
+    return { data, total };
   }
 
   async getUploadStatus(

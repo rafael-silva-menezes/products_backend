@@ -336,16 +336,24 @@ export class ProductsService extends WorkerHost {
     }
   }
 
-  async getProducts(
-    dto: GetProductsDto,
-  ): Promise<{ data: Product[]; total: number }> {
+  async getProducts(dto: GetProductsDto): Promise<{
+    data: Product[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     const { name, price, expiration, sortBy, order, limit, page } = dto;
     const skip = (page - 1) * limit;
 
     const query = this.productsRepository.createQueryBuilder('product');
 
     if (name) {
-      query.andWhere('product.name LIKE :name', { name: `%${name}%` });
+      const sanitizedName = sanitizeHtml(name, {
+        allowedTags: [],
+        allowedAttributes: {},
+      }).trim();
+      query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
     if (price !== undefined) {
       query.andWhere('product.price = :price', { price });
@@ -360,8 +368,9 @@ export class ProductsService extends WorkerHost {
     query.skip(skip).take(limit);
 
     const [data, total] = await query.getManyAndCount();
+    const totalPages = Math.ceil(total / limit);
 
-    return { data, total };
+    return { data, total, page, limit, totalPages };
   }
 
   async getUploadStatus(

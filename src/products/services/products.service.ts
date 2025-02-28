@@ -185,11 +185,7 @@ export class ProductsService extends WorkerHost {
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
-        const ttl = parseInt(
-          this.configService.get('CACHE_TTL_EXCHANGE_RATES') || '3600',
-          10,
-        );
-        await this.cacheManager.set(cacheKey, exchangeRates, ttl);
+        await this.cacheManager.set(cacheKey, exchangeRates);
         this.logger.log('Fetched and cached exchange rates');
         this.cacheStats.misses++;
       } catch (error) {
@@ -387,11 +383,7 @@ export class ProductsService extends WorkerHost {
     }
 
     try {
-      const ttl = parseInt(
-        this.configService.get('CACHE_TTL_EXCHANGE_RATES') || '3600',
-        10,
-      );
-      await this.cacheManager.set(cacheKey, exchangeRates, ttl);
+      await this.cacheManager.set(cacheKey, exchangeRates);
       this.logger.log(
         `Successfully cached exchange rates with key: ${cacheKey} (TTL: ${ttl}s)`,
       );
@@ -489,15 +481,9 @@ export class ProductsService extends WorkerHost {
 
     this.logger.log(`Query completed. Total items: ${total}. Saving to cache.`);
     try {
-      const ttl = parseInt(
-        this.configService.get('CACHE_TTL_PRODUCTS') || '3600',
-        10,
-      );
-      await this.cacheManager.set(cacheKey, result, ttl);
-      this.logger.log(
-        `Successfully saved to cache with key: ${cacheKey} (TTL: ${ttl}s)`,
-      );
-      this.productCacheKeys.add(cacheKey); // Rastrear chave salva
+      await this.cacheManager.set(cacheKey, result);
+      this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
+      // Verificar se o valor foi realmente salvo
       const cachedAfterSet = await this.cacheManager.get(cacheKey);
       this.logger.log(
         `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,

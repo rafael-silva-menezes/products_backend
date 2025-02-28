@@ -241,7 +241,15 @@ export class ProductsService extends WorkerHost {
     errors: string[],
   ): Promise<void> {
     try {
-      await this.productsRepository.save(batch);
+      await this.productsRepository.query(
+        `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${batch.map(() => '($1, $2, $3, $4)').join(',')}`,
+        batch.flatMap((p) => [
+          p.name,
+          p.price,
+          p.expiration,
+          JSON.stringify(p.exchangeRates),
+        ]),
+      );
       this.logger.log(
         `Saved batch of ${batch.length} products at row ${rowIndex}`,
       );

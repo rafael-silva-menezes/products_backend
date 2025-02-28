@@ -59,8 +59,20 @@ export class ProductsService extends WorkerHost {
     };
   }
 
-  @Process('split-csv')
-  async process(job: Job<{ filePath: string }>): Promise<{ jobIds: string[] }> {
+  async process(job: Job<any>): Promise<any> {
+    switch (job.name) {
+      case 'split-csv':
+        return this.processSplitCsv(job as Job<{ filePath: string }>);
+      case 'process-csv-chunk':
+        return this.processChunk(job as Job<{ filePath: string }>);
+      default:
+        throw new Error(`Unknown job name: ${job.name}`);
+    }
+  }
+
+  private async processSplitCsv(
+    job: Job<{ filePath: string }>,
+  ): Promise<{ jobIds: string[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV split for file: ${filePath}`);
 
@@ -131,8 +143,7 @@ export class ProductsService extends WorkerHost {
     return job.id as string;
   }
 
-  @Process('process-csv-chunk')
-  async processChunk(
+  private async processChunk(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: string[] }> {
     const { filePath } = job.data;

@@ -37,18 +37,16 @@ import { Logger } from '@nestjs/common';
       isGlobal: true,
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        const logger = new Logger('CacheModule');
         const redisConfig = {
           store: redisStore,
-          socket: {
-            host: configService.get('REDIS_HOST') || 'localhost',
-            port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
-          },
-          password: configService.get('REDIS_PASSWORD') || undefined,
-          ttl: parseInt(configService.get('CACHE_TTL_PRODUCTS') || '3600', 10), // TTL padrão configurável
+          host: String(configService.get('REDIS_HOST')) || 'localhost',
+          port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
+          password: String(configService.get('REDIS_PASSWORD')) || undefined,
+          ttl: parseInt(configService.get('CACHE_TTL_PRODUCTS') || '3600', 10),
         };
-        logger.log(
+        Logger.log(
           `Initializing CacheModule with Redis config: ${JSON.stringify(redisConfig)}`,
+          'CacheModule',
         );
         return redisConfig;
       },

@@ -19,7 +19,7 @@ import { ProductsController } from './controllers/products.controller';
       useFactory: async (configService: ConfigService) => ({
         store: redisStore,
         socket: {
-          host: configService.get('REDIS_HOST') || 'localhost',
+          host: String(configService.get('REDIS_HOST')) || 'localhost',
           port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
         },
         password: configService.get('REDIS_PASSWORD') || undefined,

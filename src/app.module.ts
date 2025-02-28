@@ -2,8 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { CacheModule } from '@nestjs/cache-manager'; // Adicionar CacheModule
-import * as redisStore from 'cache-manager-redis-store';
 import { ProductsModule } from './products/products.module';
 import { AppDataSource } from './config/data-source';
 
@@ -29,17 +27,6 @@ import { AppDataSource } from './config/data-source';
           port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
           password: configService.get('REDIS_PASSWORD') || undefined,
         },
-      }),
-      inject: [ConfigService],
-    }),
-    CacheModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        store: redisStore,
-        host: configService.get('REDIS_HOST') || 'localhost',
-        port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
-        password: configService.get('REDIS_PASSWORD') || undefined,
-        ttl: 3600,
       }),
       inject: [ConfigService],
     }),

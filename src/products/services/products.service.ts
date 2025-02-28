@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
@@ -15,11 +15,11 @@ import { WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Cache } from 'cache-manager';
-import { CACHE_MANAGER, Inject } from '@nestjs/cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as path from 'path';
 
 @Injectable()
-@Processor('csv-processing', { concurrency: 4 }) // Aumentar concorrência
+@Processor('csv-processing', { concurrency: 4 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
 
@@ -51,39 +51,43 @@ export class ProductsService extends WorkerHost {
     let lineCount = 0;
     let chunkIndex = 0;
     let currentChunk: string[] = [];
-    let writeStream: fs.WriteStream;
+    let writeStream: fs.WriteStream | undefined; // Inicializado como undefined
 
     const stream = fs
       .createReadStream(file.path)
       .pipe(parse({ delimiter: ';' }));
 
     for await (const row of stream) {
+      const rowString = row.join(';');
       if (lineCount === 0) {
         // Header row
-        currentChunk.push(row.join(';'));
+        currentChunk.push(rowString);
         lineCount++;
         continue;
       }
 
       if (lineCount % chunkSize === 1) {
+        // Finalizar o chunk anterior, se existir
         if (writeStream) {
           writeStream.end();
           const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
           jobs.push(await this.enqueueChunk(chunkPath));
           chunkIndex++;
         }
-        currentChunk = [currentChunk[0]]; // Include header
+        // Iniciar novo chunk com o header
+        currentChunk = [currentChunk[0]]; // Header
         writeStream = fs.createWriteStream(
           path.join(chunkDir, `chunk-${chunkIndex}.csv`),
         );
       }
 
-      currentChunk.push(row.join(';'));
-      writeStream.write(row.join(';') + '\n');
+      currentChunk.push(rowString);
+      writeStream!.write(rowString + '\n'); // Usar ! pois writeStream é garantido após a inicialização
       lineCount++;
     }
 
-    if (currentChunk.length > 1) {
+    // Finalizar o último chunk, se houver linhas
+    if (currentChunk.length > 1 && writeStream) {
       writeStream.end();
       const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
       jobs.push(await this.enqueueChunk(chunkPath));
@@ -130,7 +134,7 @@ export class ProductsService extends WorkerHost {
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
-        await this.cacheManager.set(cacheKey, exchangeRates, 3600); // Cache por 1 hora
+        await this.cacheManager.set(cacheKey, exchangeRates, 3600);
         this.logger.log('Fetched and cached exchange rates');
       } catch (error) {
         this.logger.error(`Failed to fetch exchange rates: ${error.message}`);

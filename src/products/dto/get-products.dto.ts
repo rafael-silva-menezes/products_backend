@@ -37,11 +37,11 @@ export class GetProductsDto {
   @Min(1)
   @Max(100)
   @Type(() => Number)
-  limit: number = 10; // Padrão: 10 itens por página
+  limit?: number;
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(1)
   @Type(() => Number)
-  page: number = 1; // Padrão: primeira página
+  page?: number;
 }

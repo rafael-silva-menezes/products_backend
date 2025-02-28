@@ -9,7 +9,7 @@ import { BullModule } from '@nestjs/bullmq';
   imports: [
     TypeOrmModule.forFeature([Product]),
     BullModule.registerQueue({
-      name: 'csv-processing', // Register the 'csv-processing' queue
+      name: 'csv-processing',
     }),
   ],
   providers: [ProductsService],

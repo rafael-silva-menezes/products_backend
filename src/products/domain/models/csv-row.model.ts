@@ -11,7 +11,7 @@ export class CsvRow {
     exchangeRates: { [key: string]: number },
     sanitize: (input: string) => string,
   ): { product?: Product; error?: string } {
-    const sanitizedName = sanitize(this.name);
+    const sanitizedName = sanitize(this.name).trim();
     const priceStr = (this.price || '').replace('$', '').trim();
     const price = priceStr !== '' ? parseFloat(priceStr) : null;
     const expiration = this.expiration ? this.expiration.trim() : null;
@@ -22,13 +22,13 @@ export class CsvRow {
 
     if (priceStr !== '' && (price === null || isNaN(price) || price < 0)) {
       return {
-        error: `'price' must be a valid non-negative number, got '${priceStr}'`,
+        error: `'price' must be a valid non-negative number (e.g., 123.45), got '${priceStr}'`,
       };
     }
 
     if (expiration && !this.isValidDate(expiration)) {
       return {
-        error: `'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`,
+        error: `'expiration' must be a valid date in YYYY-MM-DD format, got '${expiration}'`,
       };
     }
 
@@ -41,11 +41,16 @@ export class CsvRow {
   }
 
   private isValidDate(dateStr: string): boolean {
-    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    const regex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
     if (!regex.test(dateStr)) return false;
-    const date = new Date(dateStr);
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return (
-      !isNaN(date.getTime()) && dateStr === date.toISOString().split('T')[0]
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day &&
+      !isNaN(date.getTime())
     );
   }
 }

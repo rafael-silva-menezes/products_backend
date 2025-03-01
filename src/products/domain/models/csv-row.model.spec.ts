@@ -1,102 +1,89 @@
 import { CsvRow } from './csv-row.model';
-import { Product } from '../entities/product.entity';
+import { Product } from '../../domain/entities/product.entity';
 
 describe('CsvRow', () => {
-  const exchangeRates = { USD: 1, EUR: 0.85, GBP: 0.75, JPY: 110, BRL: 5.5 };
-  const sanitize = jest.fn((input: string) => input);
-
-  beforeEach(() => {
-    sanitize.mockClear();
-  });
+  const exchangeRates = { USD: 1, EUR: 0.85, GBP: 0.73, JPY: 110, BRL: 5.2 };
+  const sanitize = (input: string) => input.replace(/<[^>]+>/g, '').trim(); // Mock simples para sanitização
 
   describe('toProduct', () => {
-    it('should transform a valid row into a Product', () => {
-      const row = new CsvRow('Apple', '1.99', '2023-12-31');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should create a product with valid data', () => {
+      const csvRow = new CsvRow('Test Product', '123.45', '2025-03-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeDefined();
       expect(result.error).toBeUndefined();
-      expect(result.product).toMatchObject({
-        name: 'Apple',
-        price: 1.99,
-        expiration: '2023-12-31',
+      expect(result.product).toEqual({
+        name: 'Test Product',
+        price: 123.45,
+        expiration: '2025-03-01',
         exchangeRates,
       } as Partial<Product>);
-      expect(sanitize).toHaveBeenCalledWith('Apple');
     });
 
-    it('should return an error for an empty name', () => {
-      const row = new CsvRow('', '1.99', '2023-12-31');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should return an error for missing or empty name after sanitization', () => {
+      const csvRow = new CsvRow('<script></script>', '123.45', '2025-03-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
         "'name' is missing or empty after sanitization",
       );
-      expect(sanitize).toHaveBeenCalledWith('');
     });
 
-    it('should return an error for an invalid price', () => {
-      const row = new CsvRow('Banana', 'abc', '2023-12-31');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should return an error for invalid price format', () => {
+      const csvRow = new CsvRow('Test Product', '$abc', '2025-03-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'price' must be a valid non-negative number, got 'abc'",
+        "'price' must be a valid non-negative number (e.g., 123.45), got 'abc'",
       );
-      expect(sanitize).toHaveBeenCalledWith('Banana');
     });
 
-    it('should return an error for a negative price', () => {
-      const row = new CsvRow('Orange', '-1', '2023-12-31');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should return an error for negative price', () => {
+      const csvRow = new CsvRow('Test Product', '-123.45', '2025-03-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'price' must be a valid non-negative number, got '-1'",
+        "'price' must be a valid non-negative number (e.g., 123.45), got '-123.45'",
       );
-      expect(sanitize).toHaveBeenCalledWith('Orange');
     });
 
-    it('should return an error for an invalid expiration date', () => {
-      const row = new CsvRow('Grape', '2.50', 'invalid-date');
-      const result = row.toProduct(exchangeRates, sanitize);
-
-      expect(result.product).toBeUndefined();
-      expect(result.error).toBe(
-        "'expiration' must be a valid date (YYYY-MM-DD), got 'invalid-date'",
-      );
-      expect(sanitize).toHaveBeenCalledWith('Grape');
-    });
-
-    it('should handle optional empty price and expiration', () => {
-      const row = new CsvRow('Pear', '', '');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should accept null or empty price as null', () => {
+      const csvRow = new CsvRow('Test Product', '', '2025-03-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeDefined();
-      expect(result.error).toBeUndefined();
-      expect(result.product).toMatchObject({
-        name: 'Pear',
-        price: null,
-        expiration: null,
-        exchangeRates,
-      } as Partial<Product>);
-      expect(sanitize).toHaveBeenCalledWith('Pear');
+      expect(result.product!.price).toBeNull();
     });
 
-    it('should handle price with $ symbol', () => {
-      const row = new CsvRow('Mango', '$3.75', '2023-12-31');
-      const result = row.toProduct(exchangeRates, sanitize);
+    it('should return an error for invalid expiration date format', () => {
+      const csvRow = new CsvRow('Test Product', '123.45', '2025-13-01');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
+
+      expect(result.product).toBeUndefined();
+      expect(result.error).toBe(
+        "'expiration' must be a valid date in YYYY-MM-DD format, got '2025-13-01'",
+      );
+    });
+
+    it('should return an error for non-existent date', () => {
+      const csvRow = new CsvRow('Test Product', '123.45', '2025-02-30');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
+
+      expect(result.product).toBeUndefined();
+      expect(result.error).toBe(
+        "'expiration' must be a valid date in YYYY-MM-DD format, got '2025-02-30'",
+      );
+    });
+
+    it('should accept null or empty expiration as null', () => {
+      const csvRow = new CsvRow('Test Product', '123.45', '');
+      const result = csvRow.toProduct(exchangeRates, sanitize);
 
       expect(result.product).toBeDefined();
-      expect(result.error).toBeUndefined();
-      expect(result.product).toMatchObject({
-        name: 'Mango',
-        price: 3.75,
-        expiration: '2023-12-31',
-        exchangeRates,
-      } as Partial<Product>);
-      expect(sanitize).toHaveBeenCalledWith('Mango');
+      expect(result.product!.expiration).toBeNull();
     });
   });
 });

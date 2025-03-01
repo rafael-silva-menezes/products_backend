@@ -1,11 +1,10 @@
 import { IProductRepository } from '@application/interfaces/product-repository.interface';
-import { Product } from '../../domain/entities/product.entity';
+import { Product } from '@domain/entities/product.entity';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { GetProductsDto } from '@presentation/dtos/get-products.dto';
 import { Repository } from 'typeorm';
 import * as sanitizeHtml from 'sanitize-html';
-
 @Injectable()
 export class ProductRepository implements IProductRepository {
   constructor(

@@ -1,9 +1,9 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Product } from '@domain/entities/product.entity';
+import { TestingModule, Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ProductRepository } from './product.repository';
-import { Product } from '../../domain/entities/product.entity';
-import { Repository } from 'typeorm';
 import { GetProductsDto } from '@presentation/dtos/get-products.dto';
+import { Repository } from 'typeorm';
+import { ProductRepository } from './product.repository';
 
 describe('ProductRepository', () => {
   let repository: ProductRepository;

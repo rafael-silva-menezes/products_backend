@@ -26,6 +26,7 @@ import { GetProductsDto } from '../dto/get-products.dto';
 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
+  private productCacheKeys: Set<string> = new Set(); // Rastrear chaves de cache de produtos
 
   constructor(
     @InjectRepository(Product)
@@ -35,6 +36,25 @@ export class ProductsService extends WorkerHost {
     private configService: ConfigService,
   ) {
     super();
+  }
+
+  private async invalidateProductCache(): Promise<void> {
+    if (this.productCacheKeys.size === 0) {
+      this.logger.log('No product cache keys to invalidate');
+      return;
+    }
+    try {
+      for (const key of this.productCacheKeys) {
+        await this.cacheManager.del(key);
+        this.logger.log(`Cache invalidated for key: ${key}`);
+      }
+      this.logger.log(
+        `Invalidated ${this.productCacheKeys.size} product cache keys`,
+      );
+      this.productCacheKeys.clear();
+    } catch (error) {
+      this.logger.error(`Failed to invalidate product cache: ${error.message}`);
+    }
   }
 
   async uploadCsv(
@@ -47,13 +67,11 @@ export class ProductsService extends WorkerHost {
     const job = await this.csvQueue.add(
       'split-csv',
       { filePath: file.path },
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
-      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
     );
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
+    await this.invalidateProductCache(); // Invalidar cache no upload
     return {
       message: 'File upload accepted for processing',
       jobId: job.id as string,
@@ -381,7 +399,6 @@ export class ProductsService extends WorkerHost {
       limit = 10,
       page = 1,
     } = dto;
-
     const cacheKey = `products:${JSON.stringify(dto)}`;
     const cached = await this.cacheManager.get<{
       data: Product[];
@@ -401,7 +418,6 @@ export class ProductsService extends WorkerHost {
     }
 
     const query = this.productsRepository.createQueryBuilder('product');
-
     if (name) {
       const sanitizedName = sanitizeHtml(name, {
         allowedTags: [],
@@ -409,15 +425,12 @@ export class ProductsService extends WorkerHost {
       }).trim();
       query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
-    if (price !== undefined) {
+    if (price !== undefined)
       query.andWhere('product.price = :price', { price });
-    }
-    if (expiration) {
+    if (expiration)
       query.andWhere('product.expiration = :expiration', { expiration });
-    }
-    if (sortBy) {
+    if (sortBy)
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
-    }
 
     const totalQuery = query.clone();
     const total = await totalQuery.getCount();
@@ -448,7 +461,7 @@ export class ProductsService extends WorkerHost {
     try {
       await this.cacheManager.set(cacheKey, result);
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
-      // Verificar se o valor foi realmente salvo
+      this.productCacheKeys.add(cacheKey); // Rastrear chave salva
       const cachedAfterSet = await this.cacheManager.get(cacheKey);
       this.logger.log(
         `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,

@@ -31,7 +31,7 @@ export class ProductsController {
   @HttpCode(202)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 100 * 1024 * 1024 },
+      limits: { fileSize: 1000 * 1024 * 1024 },
       storage: diskStorage({
         destination: './uploads',
         filename: (req, file, cb) => {

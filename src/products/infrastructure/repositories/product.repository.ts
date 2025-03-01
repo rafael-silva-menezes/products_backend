@@ -1,20 +1,20 @@
+import { IProductRepository } from '@application/interfaces/product-repository.interface';
+import { Product } from '@domain/entities/product.entity';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { GetProductsDto } from '@presentation/dtos/get-products.dto';
 import { Repository } from 'typeorm';
-import { IProductRepository } from '../../application/interfaces/product-repository.interface';
 import * as sanitizeHtml from 'sanitize-html';
-import { Product } from 'src/products/domain/entities/product.entity';
-import { GetProductsDto } from 'src/products/presentation/dtos/get-products.dto';
 
 @Injectable()
 export class ProductRepository implements IProductRepository {
   constructor(
     @InjectRepository(Product)
-    private readonly productsRepository: Repository<Product>,
+    private readonly repository: Repository<Product>,
   ) {}
 
   async saveProducts(products: Product[]): Promise<void> {
-    await this.productsRepository.query(
+    await this.repository.query(
       `INSERT INTO product (name, price, expiration, "exchangeRates") VALUES ${products.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',')}`,
       products.flatMap((p) => [
         p.name,
@@ -41,7 +41,7 @@ export class ProductRepository implements IProductRepository {
       limit = 10,
       page = 1,
     } = dto;
-    const query = this.productsRepository.createQueryBuilder('product');
+    const query = this.repository.createQueryBuilder('product');
     if (name) {
       const sanitizedName = sanitizeHtml(name, {
         allowedTags: [],
@@ -61,7 +61,7 @@ export class ProductRepository implements IProductRepository {
 
     if (page > 1) {
       const previousPageOffset = (page - 1) * limit;
-      const lastIdPreviousPage = await this.productsRepository
+      const lastIdPreviousPage = await this.repository
         .createQueryBuilder('product')
         .select('product.id')
         .orderBy('product.id', 'ASC')

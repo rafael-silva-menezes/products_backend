@@ -6,7 +6,6 @@ import { redisStore } from 'cache-manager-redis-store';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ProductsModule } from './products/products.module';
 import { AppDataSource } from './config/data-source';
-import { Logger } from '@nestjs/common';
 
 @Module({
   imports: [
@@ -36,18 +35,14 @@ import { Logger } from '@nestjs/common';
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const redisConfig = {
           store: redisStore,
           host: String(configService.get('REDIS_HOST')) || 'localhost',
           port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
           password: String(configService.get('REDIS_PASSWORD')) || undefined,
-          ttl: parseInt(configService.get('CACHE_TTL_PRODUCTS') || '3600', 10),
+          ttl: 3600,
         };
-        Logger.log(
-          `Initializing CacheModule with Redis config: ${JSON.stringify(redisConfig)}`,
-          'CacheModule',
-        );
         return redisConfig;
       },
       inject: [ConfigService],

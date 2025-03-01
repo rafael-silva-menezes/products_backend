@@ -19,6 +19,12 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as path from 'path';
 import { GetProductsDto } from '../dto/get-products.dto';
 
+// Exportar a interface para uso em outros módulos
+export interface CsvError {
+  line: number;
+  error: string;
+}
+
 @Injectable()
 @Processor('csv-processing', {
   concurrency: 4,
@@ -26,7 +32,7 @@ import { GetProductsDto } from '../dto/get-products.dto';
 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
-  private productCacheKeys: Set<string> = new Set(); // Rastrear chaves de cache de produtos
+  private productCacheKeys: Set<string> = new Set();
 
   constructor(
     @InjectRepository(Product)
@@ -71,7 +77,7 @@ export class ProductsService extends WorkerHost {
     );
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
-    await this.invalidateProductCache(); // Invalidar cache no upload
+    await this.invalidateProductCache();
     return {
       message: 'File upload accepted for processing',
       jobId: job.id as string,
@@ -164,7 +170,7 @@ export class ProductsService extends WorkerHost {
 
   private async processChunk(
     job: Job<{ filePath: string }>,
-  ): Promise<{ processed: number; errors: string[] }> {
+  ): Promise<{ processed: number; errors: CsvError[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV chunk processing for file: ${filePath}`);
 
@@ -189,7 +195,7 @@ export class ProductsService extends WorkerHost {
       }
     }
 
-    const errors: string[] = [];
+    const errors: CsvError[] = [];
     let processed = 0;
     const batchSize = 10000;
     let batch: Product[] = [];
@@ -214,32 +220,37 @@ export class ProductsService extends WorkerHost {
           }).trim();
 
           const priceStr = (row.price || '').replace('$', '').trim();
-          const price = parseFloat(priceStr);
+          const price = priceStr !== '' ? parseFloat(priceStr) : null;
           const expiration = (row.expiration || '').trim();
 
           if (!sanitizedName) {
-            const errorMsg = `Row ${rowIndex}: 'name' is missing or empty after sanitization`;
+            const errorMsg = `Line ${rowIndex}: 'name' is missing or empty after sanitization`;
             this.logger.error(errorMsg);
-            errors.push(errorMsg);
+            errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
-          if (isNaN(price) || price < 0) {
-            const errorMsg = `Row ${rowIndex}: 'price' must be a valid positive number, got '${priceStr}'`;
+
+          if (
+            priceStr !== '' &&
+            (price === null || isNaN(price) || price < 0)
+          ) {
+            const errorMsg = `Line ${rowIndex}: 'price' must be a valid non-negative number, got '${priceStr}'`;
             this.logger.error(errorMsg);
-            errors.push(errorMsg);
+            errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
-          if (!this.isValidDate(expiration)) {
-            const errorMsg = `Row ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
+
+          if (expiration && !this.isValidDate(expiration)) {
+            const errorMsg = `Line ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
             this.logger.error(errorMsg);
-            errors.push(errorMsg);
+            errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
 
           const product = new Product();
           product.name = sanitizedName;
           product.price = price;
-          product.expiration = expiration;
+          product.expiration = expiration || null;
           product.exchangeRates = exchangeRates;
           batch.push(product);
 
@@ -249,9 +260,9 @@ export class ProductsService extends WorkerHost {
             batch = [];
           }
         } catch (rowError) {
-          const errorMsg = `Row ${rowIndex}: Processing error - ${rowError.message}`;
+          const errorMsg = `Line ${rowIndex}: Processing error - ${rowError.message}`;
           this.logger.error(errorMsg);
-          errors.push(errorMsg);
+          errors.push({ line: rowIndex, error: errorMsg });
           continue;
         }
       }
@@ -263,15 +274,16 @@ export class ProductsService extends WorkerHost {
 
       fs.unlinkSync(filePath);
       this.logger.log(
-        `CSV chunk processing completed: ${processed} products, ${errors.length} errors`,
+        `CSV chunk processing completed: ${processed} products processed, ${errors.length} errors`,
       );
     } catch (streamError) {
       this.logger.error(
         `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
       );
-      errors.push(
-        `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
-      );
+      errors.push({
+        line: rowIndex,
+        error: `Stream processing failed: ${streamError.message}`,
+      });
       fs.unlinkSync(filePath);
     }
 
@@ -281,7 +293,7 @@ export class ProductsService extends WorkerHost {
   private async saveBatch(
     batch: Product[],
     rowIndex: number,
-    errors: string[],
+    errors: CsvError[],
   ): Promise<void> {
     try {
       await this.productsRepository.query(
@@ -300,9 +312,10 @@ export class ProductsService extends WorkerHost {
       this.logger.error(
         `Failed to save batch at row ${rowIndex}: ${saveError.message}`,
       );
-      errors.push(
-        `Failed to save batch at row ${rowIndex}: ${saveError.message}`,
-      );
+      errors.push({
+        line: rowIndex,
+        error: `Failed to save batch: ${saveError.message}`,
+      });
     }
   }
 
@@ -461,7 +474,7 @@ export class ProductsService extends WorkerHost {
     try {
       await this.cacheManager.set(cacheKey, result);
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
-      this.productCacheKeys.add(cacheKey); // Rastrear chave salva
+      this.productCacheKeys.add(cacheKey);
       const cachedAfterSet = await this.cacheManager.get(cacheKey);
       this.logger.log(
         `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,
@@ -474,7 +487,7 @@ export class ProductsService extends WorkerHost {
 
   async getUploadStatus(
     jobId: string,
-  ): Promise<{ status: string; result?: any }> {
+  ): Promise<{ status: string; processed?: number; errors?: CsvError[] }> {
     const job = await this.csvQueue.getJob(jobId);
     if (!job) {
       throw new BadRequestException(`Job ${jobId} not found`);
@@ -483,10 +496,18 @@ export class ProductsService extends WorkerHost {
     const state = await job.getState();
     if (state === 'completed') {
       const result = await job.returnvalue;
-      return { status: 'completed', result };
+      return {
+        status: 'completed',
+        processed: result.processed,
+        errors: result.errors,
+      };
     }
     if (state === 'failed') {
-      return { status: 'failed', result: job.failedReason };
+      return {
+        status: 'failed',
+        processed: 0,
+        errors: [{ line: 0, error: job.failedReason }],
+      };
     }
     return { status: state };
   }

@@ -155,9 +155,12 @@ describe('CsvProcessorService', () => {
 
       await expect(
         service.processCsvLines(mockFilePath, exchangeRates),
-      ).rejects.toThrow(errorMessage);
+      ).rejects.toMatchObject({
+        message: errorMessage,
+      });
 
       expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
   });
 });

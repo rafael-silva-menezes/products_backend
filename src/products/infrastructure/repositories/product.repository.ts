@@ -1,5 +1,5 @@
 import { IProductRepository } from '@application/interfaces/product-repository.interface';
-import { Product } from '@domain/entities/product.entity';
+import { Product } from '../../domain/entities/product.entity';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { GetProductsDto } from '@presentation/dtos/get-products.dto';

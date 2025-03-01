@@ -224,8 +224,8 @@ export class ProductsService extends WorkerHost {
           const expiration = (row.expiration || '').trim();
 
           if (!sanitizedName) {
-            const errorMsg = `Line ${rowIndex}: 'name' is missing or empty after sanitization`;
-            this.logger.error(errorMsg);
+            const errorMsg = "'name' is missing or empty after sanitization";
+            this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
             errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
@@ -234,15 +234,15 @@ export class ProductsService extends WorkerHost {
             priceStr !== '' &&
             (price === null || isNaN(price) || price < 0)
           ) {
-            const errorMsg = `Line ${rowIndex}: 'price' must be a valid non-negative number, got '${priceStr}'`;
-            this.logger.error(errorMsg);
+            const errorMsg = `'price' must be a valid non-negative number, got '${priceStr}'`;
+            this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
             errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
 
           if (expiration && !this.isValidDate(expiration)) {
-            const errorMsg = `Line ${rowIndex}: 'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
-            this.logger.error(errorMsg);
+            const errorMsg = `'expiration' must be a valid date (YYYY-MM-DD), got '${expiration}'`;
+            this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
             errors.push({ line: rowIndex, error: errorMsg });
             continue;
           }
@@ -260,8 +260,8 @@ export class ProductsService extends WorkerHost {
             batch = [];
           }
         } catch (rowError) {
-          const errorMsg = `Line ${rowIndex}: Processing error - ${rowError.message}`;
-          this.logger.error(errorMsg);
+          const errorMsg = `Processing error - ${rowError.message}`;
+          this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
           errors.push({ line: rowIndex, error: errorMsg });
           continue;
         }

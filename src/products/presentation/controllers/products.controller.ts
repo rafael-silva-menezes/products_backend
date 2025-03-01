@@ -58,7 +58,6 @@ export class ProductsController {
     }),
   )
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    console.log('File received:', file);
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }

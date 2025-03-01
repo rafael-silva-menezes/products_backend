@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;
   let mockProductRepository: jest.Mocked<IProductRepository>;
-  let configService: jest.Mocked<ConfigService>;
 
   const exchangeRates: Record<string, number> = { USD: 1, EUR: 0.85 };
   const mockFilePath = 'test.csv';

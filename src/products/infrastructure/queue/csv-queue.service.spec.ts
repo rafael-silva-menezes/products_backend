@@ -1,4 +1,3 @@
-// src/products/infrastructure/queue/csv-queue.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';

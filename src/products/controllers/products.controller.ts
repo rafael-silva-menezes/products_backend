@@ -6,13 +6,17 @@ import {
   Get,
   Query,
   BadRequestException,
+  HttpCode,
+  Param,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProductsService } from './products.service';
-import { Product } from './product.entity';
+import { ProductsService } from '../services/products.service';
+import { Product } from '../entities/product.entity';
+import { GetProductsDto } from '../dto/get-products.dto';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -24,8 +28,10 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post('upload')
+  @HttpCode(202)
   @UseInterceptors(
     FileInterceptor('file', {
+      limits: { fileSize: 1000 * 1024 * 1024 },
       storage: diskStorage({
         destination: './uploads',
         filename: (req, file, cb) => {
@@ -50,28 +56,18 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    await this.productsService.uploadCsv(file);
-    return { message: 'File uploaded successfully' };
+    return this.productsService.uploadCsv(file);
   }
 
   @Get()
   async getProducts(
-    @Query('name') name: string,
-    @Query('price') priceStr: string,
-    @Query('expiration') expiration: string,
-    @Query('sortBy') sortBy: 'name' | 'price' | 'expiration',
-    @Query('order') order: 'ASC' | 'DESC',
-  ): Promise<Product[]> {
-    const price = priceStr ? parseFloat(priceStr) : undefined;
-    if (priceStr && isNaN(price as number)) {
-      throw new BadRequestException('Invalid price filter');
-    }
-    return this.productsService.getProducts(
-      name,
-      price,
-      expiration,
-      sortBy,
-      order,
-    );
+    @Query(ValidationPipe) dto: GetProductsDto,
+  ): Promise<{ data: Product[]; total: number }> {
+    return this.productsService.getProducts(dto);
+  }
+
+  @Get('upload-status/:id')
+  async getUploadStatus(@Param('id') jobId: string) {
+    return this.productsService.getUploadStatus(jobId);
   }
 }

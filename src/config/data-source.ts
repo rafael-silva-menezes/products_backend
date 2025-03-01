@@ -1,7 +1,7 @@
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
-import { Product } from '../products/domain/models/csv-row.model';
+import { Product } from 'src/products/domain/entities/product.entity';
 
 const configService = new ConfigService();
 

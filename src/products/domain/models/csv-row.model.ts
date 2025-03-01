@@ -1,4 +1,4 @@
-import { Product } from '../entities/product.entity';
+import { Product } from '../../domain/entities/product.entity';
 
 export class CsvRow {
   constructor(
@@ -49,5 +49,3 @@ export class CsvRow {
     );
   }
 }
-
-export { Product } from '../entities/product.entity'; // Exportação para uso no mesmo módulo

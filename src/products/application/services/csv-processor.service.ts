@@ -5,7 +5,8 @@ import { parse } from 'csv-parse';
 import * as sanitizeHtml from 'sanitize-html';
 import { CsvError } from '../../domain/errors/csv-error';
 import { IProductRepository } from '../interfaces/product-repository.interface';
-import { CsvRow, Product } from '../../domain/models/csv-row.model';
+import { CsvRow } from '../../domain/models/csv-row.model';
+import { Product } from 'src/products/domain/entities/product.entity';
 
 @Injectable()
 export class CsvProcessorService {

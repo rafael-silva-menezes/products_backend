@@ -1,4 +1,3 @@
-// @ts-check
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
@@ -22,6 +21,8 @@ export default tseslint.config(
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
+        project: "./tsconfig.json",
+        allowDefaultProject: ["jest.config.js"]
       },
     },
   },

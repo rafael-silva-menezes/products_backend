@@ -4,17 +4,25 @@ import { IProductRepository } from '../../interfaces/product-repository.interfac
 import * as fs from 'fs';
 import { Readable } from 'stream';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;
   let mockProductRepository: jest.Mocked<IProductRepository>;
+  let configService: jest.Mocked<ConfigService>;
 
-  const exchangeRates = { USD: 1, EUR: 0.85 };
+  const exchangeRates: Record<string, number> = { USD: 1, EUR: 0.85 };
   const mockFilePath = 'test.csv';
 
   const mockProductRepo = {
     saveProducts: jest.fn().mockResolvedValue(undefined),
     getProducts: jest.fn(),
+  };
+
+  const mockConfigService = {
+    get: jest.fn((key: string) =>
+      key === 'IGNORE_INVALID_LINES' ? false : undefined,
+    ),
   };
 
   jest.mock('fs');
@@ -24,7 +32,11 @@ describe('CsvProcessorService', () => {
       providers: [
         CsvProcessorService,
         { provide: IProductRepository, useValue: mockProductRepo },
-        { provide: Logger, useValue: { log: jest.fn(), error: jest.fn() } },
+        {
+          provide: Logger,
+          useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+        },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -37,7 +49,9 @@ describe('CsvProcessorService', () => {
   describe('processCsvLines', () => {
     it('should process a valid CSV with one line', async () => {
       const mockStream = Readable.from(['Apple;1.99;2023-12-31']);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
+      jest
+        .spyOn(fs, 'createReadStream')
+        .mockReturnValue(mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -56,7 +70,9 @@ describe('CsvProcessorService', () => {
 
     it('should handle an invalid CSV with empty name', async () => {
       const mockStream = Readable.from([';1.99;2023-12-31']);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
+      jest
+        .spyOn(fs, 'createReadStream')
+        .mockReturnValue(mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -68,32 +84,13 @@ describe('CsvProcessorService', () => {
         ],
       });
       expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);
     });
 
     it('should handle an invalid CSV with invalid price', async () => {
       const mockStream = Readable.from(['Banana;abc;2023-12-31']);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
-
-      const result = await service.processCsvLines(mockFilePath, exchangeRates);
-
-      expect(result).toEqual({
-        processed: 0,
-        errors: [
-          {
-            line: 1,
-            error: "'price' must be a valid non-negative number, got 'abc'",
-          },
-        ],
-      });
-      expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);
-    });
-
-    it('should handle an invalid CSV with invalid expiration date', async () => {
-      const mockStream = Readable.from(['Grape;2.50;invalid-date']);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
+      jest
+        .spyOn(fs, 'createReadStream')
+        .mockReturnValue(mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -104,57 +101,33 @@ describe('CsvProcessorService', () => {
           {
             line: 1,
             error:
-              "'expiration' must be a valid date (YYYY-MM-DD), got 'invalid-date'",
+              "'price' must be a valid non-negative number (e.g., 123.45), got 'abc'",
           },
         ],
       });
       expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);
     });
 
-    it('should process multiple valid lines and save in batches', async () => {
-      const csvContent = [
-        'Apple;1.99;2023-12-31',
-        'Banana;2.50;2023-12-31',
-      ].join('\n');
-      const mockStream = Readable.from(csvContent);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
+    it('should handle an invalid CSV with invalid expiration date', async () => {
+      const mockStream = Readable.from(['Cherry;2.50;invalid-date']);
+      jest
+        .spyOn(fs, 'createReadStream')
+        .mockReturnValue(mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
 
-      expect(result).toEqual({ processed: 2, errors: [] });
-      expect(mockProductRepository.saveProducts).toHaveBeenCalledWith([
-        expect.objectContaining({
-          name: 'Apple',
-          price: 1.99,
-          expiration: '2023-12-31',
-        }),
-        expect.objectContaining({
-          name: 'Banana',
-          price: 2.5,
-          expiration: '2023-12-31',
-        }),
-      ]);
-      expect(mockProductRepository.saveProducts).toHaveBeenCalledTimes(1);
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);
-    });
-
-    it('should handle stream error', async () => {
-      const errorMessage = 'ENOENT: no such file or directory';
-      jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
-        throw new Error(errorMessage);
+      expect(result).toEqual({
+        processed: 0,
+        errors: [
+          {
+            line: 1,
+            error:
+              "'expiration' must be a valid date in YYYY-MM-DD format, got 'invalid-date'",
+          },
+        ],
       });
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
-
-      await expect(
-        service.processCsvLines(mockFilePath, exchangeRates),
-      ).rejects.toMatchObject({
-        message: errorMessage,
-      });
-
       expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
-      expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
   });
 });

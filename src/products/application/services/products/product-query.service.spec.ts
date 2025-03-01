@@ -74,7 +74,7 @@ describe('ProductQueryService', () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
-      mockCacheManager.get.mockResolvedValue(null); // Sem cache
+      mockCacheManager.get.mockResolvedValue(null);
 
       const result = await service.getProducts(dto);
 
@@ -89,7 +89,7 @@ describe('ProductQueryService', () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
-      mockCacheManager.get.mockResolvedValue(mockResult); // Cache presente
+      mockCacheManager.get.mockResolvedValue(mockResult);
 
       const result = await service.getProducts(dto);
 
@@ -104,8 +104,8 @@ describe('ProductQueryService', () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
-      mockCacheManager.get.mockResolvedValue(null); // Sem cache
-      mockCacheManager.set.mockRejectedValue(new Error('Cache error')); // Erro ao salvar no cache
+      mockCacheManager.get.mockResolvedValue(null);
+      mockCacheManager.set.mockRejectedValue(new Error('Cache error'));
 
       const result = await service.getProducts(dto);
 
@@ -113,7 +113,7 @@ describe('ProductQueryService', () => {
       expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
       expect(mockCacheManager.get).toHaveBeenCalledWith(cacheKey);
       expect(mockCacheManager.set).toHaveBeenCalledWith(cacheKey, mockResult);
-      expect(mockCsvUploadService.addCacheKey).not.toHaveBeenCalled(); // Não adiciona chave em caso de erro
+      expect(mockCsvUploadService.addCacheKey).not.toHaveBeenCalled();
     });
 
     it('should filter products by name', async () => {

@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { CsvError } from 'csv-parse/.';
+import { CsvError } from '../../domain/errors/csv-error';
 
 @Injectable()
 export class CsvQueueService {

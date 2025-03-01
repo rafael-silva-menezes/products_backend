@@ -1,3 +1,4 @@
+// src/products/presentation/controllers/products.controller.ts
 import {
   Controller,
   Post,
@@ -18,8 +19,8 @@ import { CsvUploadService } from '../../application/services/csv-upload.service'
 import { ProductQueryService } from '../../application/services/product-query.service';
 import { CsvQueueService } from '../../infrastructure/queue/csv-queue.service';
 import { Product } from '../../domain/entities/product.entity';
-import { GetProductsDto } from '../../presentation/dtos/get-products.dto';
-import { CsvError } from '../../domain/errors/csv-error';
+import { GetProductsDto } from '../dtos/get-products.dto';
+import { CsvError } from '../../domain/errors/csv-error'; // Tipagem correta
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {

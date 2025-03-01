@@ -11,3 +11,5 @@ export interface IProductRepository {
     totalPages: number;
   }>;
 }
+
+export const IProductRepository = Symbol('IProductRepository');

@@ -2,16 +2,17 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { GetProductsDto } from '../../presentation/dtos/get-products.dto';
-import { Product } from '../../domain/entities/product.entity';
 import { IProductRepository } from '../interfaces/product-repository.interface';
 import { CsvUploadService } from './csv-upload.service';
+import { Product } from '../../domain/entities/product.entity';
+import { GetProductsDto } from '../../presentation/dtos/get-products.dto';
 
 @Injectable()
 export class ProductQueryService {
   private readonly logger = new Logger(ProductQueryService.name);
 
   constructor(
+    @Inject(IProductRepository)
     private readonly productRepository: IProductRepository,
     private readonly csvUploadService: CsvUploadService, // Para rastrear chaves de cache
     @Inject(CACHE_MANAGER) private cacheManager: Cache,

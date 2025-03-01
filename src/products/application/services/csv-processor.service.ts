@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
@@ -11,7 +11,10 @@ import { CsvRow, Product } from '../../domain/models/csv-row.model';
 export class CsvProcessorService {
   private readonly logger = new Logger(CsvProcessorService.name);
 
-  constructor(private readonly productRepository: IProductRepository) {}
+  constructor(
+    @Inject(IProductRepository)
+    private readonly productRepository: IProductRepository,
+  ) {}
 
   async processCsvLines(
     filePath: string,

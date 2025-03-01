@@ -1,3 +1,4 @@
+// src/products/products.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
@@ -12,6 +13,8 @@ import { ProductRepository } from './infrastructure/repositories/product.reposit
 import { CsvQueueService } from './infrastructure/queue/csv-queue.service';
 import { CsvQueueProcessor } from './infrastructure/queue/csv-queue.processor';
 import { ExchangeRateService } from './infrastructure/external/exchange-rate.service';
+import { IProductRepository as IProductRepositoryToken } from './application/interfaces/product-repository.interface';
+import { IExchangeRateService as IExchangeRateServiceToken } from './application/interfaces/exchange-rate-service.interface';
 
 @Module({
   imports: [
@@ -30,8 +33,14 @@ import { ExchangeRateService } from './infrastructure/external/exchange-rate.ser
     CsvQueueService,
     CsvQueueProcessor,
     ExchangeRateService,
-    { provide: 'IProductRepository', useClass: ProductRepository },
-    { provide: 'IExchangeRateService', useClass: ExchangeRateService },
+    {
+      provide: IProductRepositoryToken,
+      useClass: ProductRepository,
+    },
+    {
+      provide: IExchangeRateServiceToken,
+      useClass: ExchangeRateService,
+    },
   ],
 })
 export class ProductsModule {}

@@ -1,12 +1,15 @@
+// src/products/infrastructure/queue/csv-queue.processor.ts
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
+import { parse } from 'csv-parse';
 import { ConfigService } from '@nestjs/config';
 import { CsvProcessorService } from '../../application/services/csv-processor.service';
 import { IExchangeRateService } from '../../application/interfaces/exchange-rate-service.interface';
-import { CsvError } from 'csv-parse/.';
+import { CsvQueueService } from './csv-queue.service';
+import { CsvError } from '../../domain/errors/csv-error';
 
 @Processor('csv-processing', {
   concurrency: 4,
@@ -17,7 +20,9 @@ export class CsvQueueProcessor extends WorkerHost {
 
   constructor(
     private readonly csvProcessorService: CsvProcessorService,
+    @Inject(IExchangeRateService)
     private readonly exchangeRateService: IExchangeRateService,
+    private readonly csvQueueService: CsvQueueService,
     private readonly configService: ConfigService,
   ) {
     super();
@@ -69,7 +74,7 @@ export class CsvQueueProcessor extends WorkerHost {
         if (writeStream) {
           writeStream.end();
           const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
-          jobs.push(await this.enqueueChunk(chunkPath));
+          jobs.push(await this.csvQueueService.enqueueProcessChunk(chunkPath));
           chunkIndex++;
         }
         currentChunk = [currentChunk[0]];
@@ -86,7 +91,7 @@ export class CsvQueueProcessor extends WorkerHost {
     if (currentChunk.length > 1 && writeStream) {
       writeStream.end();
       const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
-      jobs.push(await this.enqueueChunk(chunkPath));
+      jobs.push(await this.csvQueueService.enqueueProcessChunk(chunkPath));
     }
 
     fs.unlinkSync(filePath);
@@ -94,24 +99,11 @@ export class CsvQueueProcessor extends WorkerHost {
     return { jobIds: jobs };
   }
 
-  private async enqueueChunk(chunkPath: string): Promise<string> {
-    const job = await this.queue.add(
-      'process-csv-chunk',
-      { filePath: chunkPath },
-      {
-        priority: 1,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
-      },
-    );
-    return job.id as string;
-  }
-
   private async processChunk(
     job: Job<{ filePath: string }>,
   ): Promise<{ processed: number; errors: CsvError[] }> {
     const exchangeRates = await this.exchangeRateService.fetchExchangeRates();
-    return this.csvProcessorService.processCsvLines(
+    return await this.csvProcessorService.processCsvLines(
       job.data.filePath,
       exchangeRates,
     );

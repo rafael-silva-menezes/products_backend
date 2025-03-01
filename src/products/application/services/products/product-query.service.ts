@@ -14,7 +14,7 @@ export class ProductQueryService {
   constructor(
     @Inject(IProductRepository)
     private readonly productRepository: IProductRepository,
-    private readonly csvUploadService: CsvUploadService, // Para rastrear chaves de cache
+    private readonly csvUploadService: CsvUploadService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
@@ -56,7 +56,7 @@ export class ProductQueryService {
     try {
       await this.cacheManager.set(cacheKey, result);
       this.logger.log(`Successfully saved to cache with key: ${cacheKey}`);
-      this.csvUploadService.addCacheKey(cacheKey); // Rastrear chave para invalidação
+      this.csvUploadService.addCacheKey(cacheKey);
       const cachedAfterSet = await this.cacheManager.get(cacheKey);
       this.logger.log(
         `Cache verification after set: ${cachedAfterSet ? 'Found' : 'Not found'}`,

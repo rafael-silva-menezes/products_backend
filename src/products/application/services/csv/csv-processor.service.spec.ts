@@ -1,12 +1,9 @@
-// src/products/application/services/csv-processor.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { CsvProcessorService } from './csv-processor.service';
 import { IProductRepository } from '../../interfaces/product-repository.interface';
 import * as fs from 'fs';
 import { Readable } from 'stream';
 import { Logger } from '@nestjs/common';
-import { CsvError } from '../../../domain/errors/csv-error';
-import { Product } from '../../../domain/entities/product.entity';
 
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;
@@ -15,13 +12,11 @@ describe('CsvProcessorService', () => {
   const exchangeRates = { USD: 1, EUR: 0.85 };
   const mockFilePath = 'test.csv';
 
-  // Mock do ProductRepository
   const mockProductRepo = {
     saveProducts: jest.fn().mockResolvedValue(undefined),
     getProducts: jest.fn(),
   };
 
-  // Mock do fs
   jest.mock('fs');
 
   beforeEach(async () => {
@@ -36,7 +31,6 @@ describe('CsvProcessorService', () => {
     service = module.get<CsvProcessorService>(CsvProcessorService);
     mockProductRepository = module.get(IProductRepository);
 
-    // Resetar mocks antes de cada teste
     jest.clearAllMocks();
   });
 

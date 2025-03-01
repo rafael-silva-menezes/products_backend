@@ -1,13 +1,12 @@
-// src/products/domain/models/csv-row.spec.ts
 import { CsvRow } from './csv-row.model';
 import { Product } from '../entities/product.entity';
 
 describe('CsvRow', () => {
   const exchangeRates = { USD: 1, EUR: 0.85, GBP: 0.75, JPY: 110, BRL: 5.5 };
-  const sanitize = jest.fn((input: string) => input); // Mock simples para sanitize-html
+  const sanitize = jest.fn((input: string) => input);
 
   beforeEach(() => {
-    sanitize.mockClear(); // Limpa o mock antes de cada teste
+    sanitize.mockClear();
   });
 
   describe('toProduct', () => {

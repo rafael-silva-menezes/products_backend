@@ -1,4 +1,3 @@
-// src/products/infrastructure/queue/csv-queue.processor.ts
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Inject, Logger } from '@nestjs/common';

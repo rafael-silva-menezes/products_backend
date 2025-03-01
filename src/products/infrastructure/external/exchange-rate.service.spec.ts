@@ -1,4 +1,3 @@
-// src/products/infrastructure/external/exchange-rate.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExchangeRateService } from './exchange-rate.service';
 import { ConfigService } from '@nestjs/config';

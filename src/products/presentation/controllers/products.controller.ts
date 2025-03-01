@@ -1,4 +1,3 @@
-// src/products/presentation/controllers/products.controller.ts
 import {
   Controller,
   Post,
@@ -20,7 +19,7 @@ import { ProductQueryService } from '../../application/services/products/product
 import { CsvQueueService } from '../../infrastructure/queue/csv-queue.service';
 import { Product } from '../../domain/entities/product.entity';
 import { GetProductsDto } from '../dtos/get-products.dto';
-import { CsvError } from '../../domain/errors/csv-error'; // Tipagem correta
+import { CsvError } from '../../domain/errors/csv-error';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {

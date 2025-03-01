@@ -5,7 +5,9 @@ import { CsvError } from '../../domain/errors/csv-error';
 
 @Injectable()
 export class CsvQueueService {
-  constructor(@InjectQueue('csv-processing') private csvQueue: Queue) {}
+  constructor(
+    @InjectQueue('csv-processing') private readonly csvQueue: Queue,
+  ) {}
 
   async enqueueSplitCsv(filePath: string): Promise<string> {
     const job = await this.csvQueue.add(
@@ -42,15 +44,15 @@ export class CsvQueueService {
       const result = await job.returnvalue;
       return {
         status: 'completed',
-        processed: result.processed,
-        errors: result.errors,
+        processed: result.processed ?? 0,
+        errors: result.errors ?? [],
       };
     }
     if (state === 'failed') {
       return {
         status: 'failed',
         processed: 0,
-        errors: [{ line: 0, error: job.failedReason }],
+        errors: [{ line: 0, error: job.failedReason ?? 'Unknown failure' }],
       };
     }
     return { status: state };

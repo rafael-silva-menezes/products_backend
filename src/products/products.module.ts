@@ -18,9 +18,7 @@ import { IExchangeRateService as IExchangeRateServiceToken } from './application
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product]),
-    BullModule.registerQueue({
-      name: 'csv-processing',
-    }),
+    BullModule.registerQueue({ name: 'csv-processing' }),
     ConfigModule,
     CacheModule.register(),
   ],
@@ -32,14 +30,8 @@ import { IExchangeRateService as IExchangeRateServiceToken } from './application
     CsvQueueService,
     CsvQueueProcessor,
     ExchangeRateService,
-    {
-      provide: IProductRepositoryToken,
-      useClass: ProductRepository,
-    },
-    {
-      provide: IExchangeRateServiceToken,
-      useClass: ExchangeRateService,
-    },
+    { provide: IProductRepositoryToken, useClass: ProductRepository },
+    { provide: IExchangeRateServiceToken, useClass: ExchangeRateService },
   ],
 })
 export class ProductsModule {}

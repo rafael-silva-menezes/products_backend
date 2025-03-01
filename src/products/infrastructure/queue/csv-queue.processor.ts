@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from 'csv-parse';
 import { ConfigService } from '@nestjs/config';
-import { CsvProcessorService } from '../../application/services/csv-processor.service';
+import { CsvProcessorService } from '../../application/services/csv/csv-processor.service';
 import { IExchangeRateService } from '../../application/interfaces/exchange-rate-service.interface';
 import { CsvQueueService } from './csv-queue.service';
 import { CsvError } from '../../domain/errors/csv-error';

@@ -1,12 +1,12 @@
 // src/products/application/services/csv-processor.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { CsvProcessorService } from './csv-processor.service';
-import { IProductRepository } from '../interfaces/product-repository.interface';
+import { IProductRepository } from '../../interfaces/product-repository.interface';
 import * as fs from 'fs';
 import { Readable } from 'stream';
 import { Logger } from '@nestjs/common';
-import { CsvError } from '../../domain/errors/csv-error';
-import { Product } from '../../domain/entities/product.entity';
+import { CsvError } from '../../../domain/errors/csv-error';
+import { Product } from '../../../domain/entities/product.entity';
 
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;

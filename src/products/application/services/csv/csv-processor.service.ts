@@ -3,9 +3,9 @@ import { Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import * as sanitizeHtml from 'sanitize-html';
-import { CsvError } from '../../domain/errors/csv-error';
-import { IProductRepository } from '../interfaces/product-repository.interface';
-import { CsvRow } from '../../domain/models/csv-row.model';
+import { CsvError } from '../../../domain/errors/csv-error';
+import { IProductRepository } from '../../interfaces/product-repository.interface';
+import { CsvRow } from '../../../domain/models/csv-row.model';
 import { Product } from 'src/products/domain/entities/product.entity';
 
 @Injectable()

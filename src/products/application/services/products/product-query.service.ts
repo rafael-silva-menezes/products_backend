@@ -2,10 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { IProductRepository } from '../interfaces/product-repository.interface';
-import { CsvUploadService } from './csv-upload.service';
-import { Product } from '../../domain/entities/product.entity';
-import { GetProductsDto } from '../../presentation/dtos/get-products.dto';
+import { IProductRepository } from '../../interfaces/product-repository.interface';
+import { CsvUploadService } from '../csv/csv-upload.service';
+import { Product } from '../../../domain/entities/product.entity';
+import { GetProductsDto } from '../../../presentation/dtos/get-products.dto';
 
 @Injectable()
 export class ProductQueryService {

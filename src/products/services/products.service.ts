@@ -26,8 +26,6 @@ import { GetProductsDto } from '../dto/get-products.dto';
 })
 export class ProductsService extends WorkerHost {
   private readonly logger = new Logger(ProductsService.name);
-  private cacheStats = { hits: 0, misses: 0 }; // Monitoramento do cache
-  private productCacheKeys: Set<string> = new Set(); // Rastrear chaves de cache de produtos
 
   constructor(
     @InjectRepository(Product)
@@ -37,30 +35,6 @@ export class ProductsService extends WorkerHost {
     private configService: ConfigService,
   ) {
     super();
-    setInterval(() => this.reportCacheStats(), 5 * 60 * 1000); // Reportar stats a cada 5 minutos
-  }
-
-  // Monitoramento: Reportar estatísticas do cache
-  private reportCacheStats(): void {
-    this.logger.log(
-      `Cache Stats: Hits=${this.cacheStats.hits}, Misses=${this.cacheStats.misses}, Hit Rate=${(
-        (this.cacheStats.hits /
-          (this.cacheStats.hits + this.cacheStats.misses) || 0) * 100
-      ).toFixed(2)}%`,
-    );
-  }
-
-  // Invalidação: Limpar chaves específicas do cache
-  private async invalidateProductCache(): Promise<void> {
-    try {
-      for (const key of this.productCacheKeys) {
-        await this.cacheManager.del(key);
-        this.logger.log(`Cache invalidated for key: ${key}`);
-      }
-      this.productCacheKeys.clear(); // Limpar após invalidação
-    } catch (error) {
-      this.logger.error(`Failed to invalidate product cache: ${error.message}`);
-    }
   }
 
   async uploadCsv(
@@ -73,7 +47,10 @@ export class ProductsService extends WorkerHost {
     const job = await this.csvQueue.add(
       'split-csv',
       { filePath: file.path },
-      { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+      },
     );
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
@@ -181,13 +158,11 @@ export class ProductsService extends WorkerHost {
     if (cachedRates) {
       exchangeRates = cachedRates;
       this.logger.log('Using cached exchange rates');
-      this.cacheStats.hits++;
     } else {
       try {
         exchangeRates = await this.fetchExchangeRates();
         await this.cacheManager.set(cacheKey, exchangeRates);
         this.logger.log('Fetched and cached exchange rates');
-        this.cacheStats.misses++;
       } catch (error) {
         this.logger.error(`Failed to fetch exchange rates: ${error.message}`);
         throw new BadRequestException(
@@ -272,9 +247,6 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `CSV chunk processing completed: ${processed} products, ${errors.length} errors`,
       );
-
-      // Invalidar cache de produtos após processamento bem-sucedido
-      await this.invalidateProductCache();
     } catch (streamError) {
       this.logger.error(
         `Stream processing failed at row ${rowIndex}: ${streamError.message}`,
@@ -334,11 +306,9 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `Returning cached exchange rates: ${JSON.stringify(cachedRates).slice(0, 100)}...`,
       );
-      this.cacheStats.hits++;
       return cachedRates;
     } else {
       this.logger.log(`No cached exchange rates found for key: ${cacheKey}`);
-      this.cacheStats.misses++;
     }
 
     const primaryUrl =
@@ -385,19 +355,11 @@ export class ProductsService extends WorkerHost {
     try {
       await this.cacheManager.set(cacheKey, exchangeRates);
       this.logger.log(
-        `Successfully cached exchange rates with key: ${cacheKey} (TTL: ${ttl}s)`,
+        `Successfully cached exchange rates with key: ${cacheKey}`,
       );
     } catch (cacheError) {
       this.logger.error(
         `Failed to cache exchange rates: ${cacheError.message}`,
-      );
-      const fallbackTtl = parseInt(
-        this.configService.get('CACHE_FALLBACK_TTL') || '300',
-        10,
-      );
-      await this.cacheManager.set(cacheKey, exchangeRates, fallbackTtl);
-      this.logger.warn(
-        `Falling back to local memory cache for key: ${cacheKey} (TTL: ${fallbackTtl}s)`,
       );
     }
     return exchangeRates;
@@ -419,6 +381,7 @@ export class ProductsService extends WorkerHost {
       limit = 10,
       page = 1,
     } = dto;
+
     const cacheKey = `products:${JSON.stringify(dto)}`;
     const cached = await this.cacheManager.get<{
       data: Product[];
@@ -432,14 +395,13 @@ export class ProductsService extends WorkerHost {
       this.logger.log(
         `Returning cached data: ${JSON.stringify(cached).slice(0, 100)}...`,
       );
-      this.cacheStats.hits++;
       return cached;
     } else {
       this.logger.log(`No cache found for key: ${cacheKey}`);
-      this.cacheStats.misses++;
     }
 
     const query = this.productsRepository.createQueryBuilder('product');
+
     if (name) {
       const sanitizedName = sanitizeHtml(name, {
         allowedTags: [],
@@ -447,12 +409,15 @@ export class ProductsService extends WorkerHost {
       }).trim();
       query.andWhere('product.name LIKE :name', { name: `%${sanitizedName}%` });
     }
-    if (price !== undefined)
+    if (price !== undefined) {
       query.andWhere('product.price = :price', { price });
-    if (expiration)
+    }
+    if (expiration) {
       query.andWhere('product.expiration = :expiration', { expiration });
-    if (sortBy)
+    }
+    if (sortBy) {
       query.orderBy(`product.${sortBy}`, order || 'ASC', 'NULLS LAST');
+    }
 
     const totalQuery = query.clone();
     const total = await totalQuery.getCount();
@@ -490,15 +455,6 @@ export class ProductsService extends WorkerHost {
       );
     } catch (cacheError) {
       this.logger.error(`Failed to save to cache: ${cacheError.message}`);
-      const fallbackTtl = parseInt(
-        this.configService.get('CACHE_FALLBACK_TTL') || '300',
-        10,
-      );
-      await this.cacheManager.set(cacheKey, result, fallbackTtl);
-      this.logger.warn(
-        `Falling back to local memory cache for key: ${cacheKey} (TTL: ${fallbackTtl}s)`,
-      );
-      this.productCacheKeys.add(cacheKey); // Rastrear mesmo no fallback
     }
     return result;
   }

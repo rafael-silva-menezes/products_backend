@@ -56,7 +56,7 @@ describe('CsvQueueProcessor', () => {
       );
     });
 
-    it('should process split-csv job', async () => {
+    it('should process split-csv job and return jobIds', async () => {
       const tempFilePath = path.join(process.cwd(), 'temp-test.csv');
       const csvContent = [
         'header1;header2',
@@ -73,11 +73,12 @@ describe('CsvQueueProcessor', () => {
 
       const result = await csvQueueProcessor.process(job);
       expect(csvQueueService.enqueueProcessChunk).toHaveBeenCalledTimes(1);
-      expect(result.jobIds).toEqual(['dummy-job-id']);
+      expect('jobIds' in result).toBeTruthy(); // Verifica se é SplitCsvResult
+      expect((result as { jobIds: string[] }).jobIds).toEqual(['dummy-job-id']); // Cast seguro
       expect(fs.existsSync(tempFilePath)).toBeFalsy();
     });
 
-    it('should process process-csv-chunk job', async () => {
+    it('should process process-csv-chunk job and return processed count and errors', async () => {
       const dummyExchangeRates = { USD: 1, EUR: 0.9 };
       exchangeRateService.fetchExchangeRates.mockResolvedValue(
         dummyExchangeRates,
@@ -98,6 +99,7 @@ describe('CsvQueueProcessor', () => {
         'dummy-chunk-file.csv',
         dummyExchangeRates,
       );
+      expect('processed' in result && 'errors' in result).toBeTruthy(); // Verifica se é ChunkResult
       expect(result).toEqual(expectedResult);
     });
   });

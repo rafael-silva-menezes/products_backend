@@ -9,6 +9,7 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "start:dev-all": "docker compose up -d && npm run migration:run && npm run start:dev",
     "start:dev": "NODE_OPTIONS=\"--max-old-space-size=4096\" nest start --watch",
     "start:debug": "NODE_OPTIONS=\"--max-old-space-size=4096\" nest start --debug --watch",
     "start:prod": "NODE_OPTIONS=\"--max-old-space-size=4096\" node dist/main",

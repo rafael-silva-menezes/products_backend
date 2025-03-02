@@ -24,19 +24,13 @@ type RawCsvRow = {
 @Injectable()
 export class CsvProcessorService {
   private readonly logger = new Logger(CsvProcessorService.name);
-  private readonly ignoreInvalidLines: boolean;
   private readonly batchSize = 10000;
 
   constructor(
     @Inject(IProductRepository)
     private readonly productRepository: IProductRepository,
     private readonly configService: ConfigService,
-  ) {
-    this.ignoreInvalidLines = this.configService.get<boolean>(
-      'IGNORE_INVALID_LINES',
-      false,
-    );
-  }
+  ) {}
 
   async processCsvLines(
     filePath: string,
@@ -109,9 +103,7 @@ export class CsvProcessorService {
 
       if (error) {
         this.logger.warn(`Line ${rowIndex}: ${error}`);
-        if (!this.ignoreInvalidLines) {
-          result.errors.push({ line: rowIndex, error });
-        }
+        result.errors.push({ line: rowIndex, error });
         return;
       }
 
@@ -121,9 +113,7 @@ export class CsvProcessorService {
     } catch (rowError) {
       const errorMsg = `Processing error - ${(rowError as Error).message}`;
       this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
-      if (!this.ignoreInvalidLines) {
-        result.errors.push({ line: rowIndex, error: errorMsg });
-      }
+      result.errors.push({ line: rowIndex, error: errorMsg });
     }
   }
 
@@ -148,9 +138,7 @@ export class CsvProcessorService {
     this.logger.error(
       `Stream processing failed at row ${rowIndex}: ${error.message}`,
     );
-    if (!this.ignoreInvalidLines) {
-      result.errors.push({ line: rowIndex, error: errorMsg });
-    }
+    result.errors.push({ line: rowIndex, error: errorMsg });
   }
 
   private cleanupFile(filePath: string): void {

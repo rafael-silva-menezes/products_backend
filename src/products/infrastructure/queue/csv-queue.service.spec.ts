@@ -6,7 +6,7 @@ import { CsvError } from '@domain/errors/csv-error';
 
 describe('CsvQueueService', () => {
   let service: CsvQueueService;
-  let mockQueue: any;
+  let mockQueue: { add: jest.Mock<any, any>; getJob: jest.Mock<any, any> };
 
   const mockFilePath = '/path/to/file.csv';
   const mockChunkPath = '/path/to/chunk.csv';

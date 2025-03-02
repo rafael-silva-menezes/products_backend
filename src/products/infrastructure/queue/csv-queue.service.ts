@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Queue, Job } from 'bullmq';
 import { CsvError } from '../../domain/errors/csv-error';
 
 @Injectable()
@@ -39,7 +39,7 @@ export class CsvQueueService {
       throw new BadRequestException(`Job ${jobId} not found`);
     }
 
-    const state = await job.getState();
+    const state = await (job as Job).getState();
     if (state === 'completed') {
       const result = await job.returnvalue;
       return {

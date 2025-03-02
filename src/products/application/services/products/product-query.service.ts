@@ -25,15 +25,6 @@ export class ProductQueryService {
     limit: number;
     totalPages: number;
   }> {
-    const {
-      name,
-      price,
-      expiration,
-      sortBy,
-      order,
-      limit = 10,
-      page = 1,
-    } = dto;
     const cacheKey = `products:${JSON.stringify(dto)}`;
     const cached = await this.cacheManager.get<{
       data: Product[];

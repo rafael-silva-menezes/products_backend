@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;
   let mockProductRepository: jest.Mocked<IProductRepository>;
-  let mockConfigService: jest.Mocked<ConfigService>;
 
   const exchangeRates: Record<string, number> = { USD: 1, EUR: 0.85 };
   const mockFilePath = 'test.csv';
@@ -20,12 +19,6 @@ describe('CsvProcessorService', () => {
   };
 
   beforeEach(async () => {
-    mockConfigService = {
-      get: jest.fn((key: string) =>
-        key === 'IGNORE_INVALID_LINES' ? false : undefined,
-      ),
-    } as any;
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CsvProcessorService,
@@ -34,7 +27,7 @@ describe('CsvProcessorService', () => {
           provide: Logger,
           useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
         },
-        { provide: ConfigService, useValue: mockConfigService },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 

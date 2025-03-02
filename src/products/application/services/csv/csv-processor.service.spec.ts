@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 describe('CsvProcessorService', () => {
   let service: CsvProcessorService;
   let mockProductRepository: jest.Mocked<IProductRepository>;
+  let mockConfigService: jest.Mocked<ConfigService>;
 
   const exchangeRates: Record<string, number> = { USD: 1, EUR: 0.85 };
   const mockFilePath = 'test.csv';
@@ -18,15 +19,13 @@ describe('CsvProcessorService', () => {
     getProducts: jest.fn(),
   };
 
-  const mockConfigService = {
-    get: jest.fn((key: string) =>
-      key === 'IGNORE_INVALID_LINES' ? false : undefined,
-    ),
-  };
-
-  jest.mock('fs');
-
   beforeEach(async () => {
+    mockConfigService = {
+      get: jest.fn((key: string) =>
+        key === 'IGNORE_INVALID_LINES' ? false : undefined,
+      ),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CsvProcessorService,
@@ -127,6 +126,41 @@ describe('CsvProcessorService', () => {
         ],
       });
       expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
+    });
+
+    it('should ignore invalid lines when IGNORE_INVALID_LINES is true', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CsvProcessorService,
+          { provide: IProductRepository, useValue: mockProductRepo },
+          {
+            provide: Logger,
+            useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+          },
+          {
+            provide: ConfigService,
+            useValue: {
+              get: jest.fn((key: string) =>
+                key === 'IGNORE_INVALID_LINES' ? true : undefined,
+              ),
+            },
+          },
+        ],
+      }).compile();
+
+      service = module.get<CsvProcessorService>(CsvProcessorService);
+
+      const mockStream = Readable.from(['Banana;abc;2023-12-31']);
+      jest
+        .spyOn(fs, 'createReadStream')
+        .mockReturnValue(mockStream as fs.ReadStream);
+      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
+
+      const result = await service.processCsvLines(mockFilePath, exchangeRates);
+
+      expect(result).toEqual({ processed: 0, errors: [] });
+      expect(mockProductRepository.saveProducts).not.toHaveBeenCalled();
+      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);
     });
   });
 });

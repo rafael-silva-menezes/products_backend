@@ -7,6 +7,7 @@ import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { BadRequestException } from '@nestjs/common';
 import { Readable } from 'stream';
+import { ConfigService } from '@nestjs/config';
 
 describe('CsvUploadService', () => {
   let service: CsvUploadService;
@@ -28,7 +29,10 @@ describe('CsvUploadService', () => {
 
   beforeEach(async () => {
     mockQueue = {
-      add: jest.fn().mockResolvedValue({ id: '123' }),
+      add: jest.fn().mockResolvedValue({
+        id: '123',
+        waitUntilFinished: jest.fn().mockResolvedValue({ jobIds: ['124'] }),
+      }),
     } as any;
 
     mockCacheManager = {
@@ -51,6 +55,7 @@ describe('CsvUploadService', () => {
         { provide: getQueueToken('csv-processing'), useValue: mockQueue },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: Logger, useValue: { log: jest.fn(), error: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
@@ -63,7 +68,7 @@ describe('CsvUploadService', () => {
 
       expect(result).toEqual({
         message: 'File upload accepted for processing',
-        jobId: '123',
+        jobIds: ['124'],
       });
       expect(mockQueue.add).toHaveBeenCalledWith(
         'split-csv',

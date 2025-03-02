@@ -3,17 +3,29 @@ import { Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class CsvUploadService {
   private readonly logger = new Logger(CsvUploadService.name);
   private productCacheKeys: Set<string> = new Set();
+  private readonly queueEvents: QueueEvents;
 
   constructor(
     @InjectQueue('csv-processing') private csvQueue: Queue,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    const redisConfig = {
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port: this.configService.get<number>('REDIS_PORT', 6379),
+      password: this.configService.get<string>('REDIS_PASSWORD'),
+    };
+    this.queueEvents = new QueueEvents('csv-processing', {
+      connection: redisConfig,
+    });
+  }
 
   async uploadCsv(
     file: Express.Multer.File,
@@ -30,9 +42,7 @@ export class CsvUploadService {
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
 
-    // Aguarda o job split-csv completar para obter os jobIds dos chunks
-    await job.waitUntilFinished(this.csvQueue.events);
-    const result = await job.returnvalue;
+    const result = await job.waitUntilFinished(this.queueEvents);
     const jobIds = result.jobIds as string[];
 
     if (!jobIds || jobIds.length === 0) {

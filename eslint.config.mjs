@@ -33,6 +33,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-argument': 'warn',
       "@typescript-eslint/unbound-method": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
 
       '@typescript-eslint/interface-name-prefix': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',

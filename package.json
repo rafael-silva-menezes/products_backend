@@ -30,6 +30,7 @@
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.10",
+    "@nestjs/swagger": "^11.0.6",
     "@nestjs/typeorm": "^11.0.0",
     "axios": "^1.7.9",
     "bullmq": "^5.41.7",
@@ -44,6 +45,7 @@
     "rxjs": "^7.8.1",
     "sanitize-html": "^2.14.0",
     "sqlite3": "^5.1.7",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.20"
   },
   "devDependencies": {

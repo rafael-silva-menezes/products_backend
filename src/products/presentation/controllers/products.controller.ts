@@ -20,12 +20,20 @@ import { CsvQueueService } from '../../infrastructure/queue/csv-queue.service';
 import { Product } from '../../domain/entities/product.entity';
 import { GetProductsDto } from '../dtos/get-products.dto';
 import { CsvError } from '../../domain/errors/csv-error';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
+@ApiTags('products')
 @Controller('products')
 export class ProductsController {
   constructor(
@@ -57,6 +65,17 @@ export class ProductsController {
       },
     }),
   )
+  @ApiOperation({ summary: 'Upload a CSV file with product data' })
+  @ApiBody({ type: 'multipart/form-data', description: 'CSV file' })
+  @ApiResponse({
+    status: 202,
+    description: 'File upload accepted',
+    type: Object,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid file type or no file uploaded',
+  })
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -65,6 +84,35 @@ export class ProductsController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get a paginated list of products' })
+  @ApiQuery({ name: 'name', required: false, type: String })
+  @ApiQuery({ name: 'price', required: false, type: Number })
+  @ApiQuery({ name: 'expiration', required: false, type: String })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['name', 'price', 'expiration'],
+  })
+  @ApiQuery({ name: 'order', required: false, enum: ['ASC', 'DESC'] })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'List of products',
+    type: Object,
+    schema: {
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Product' },
+        },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
+  })
   async getProducts(@Query(ValidationPipe) dto: GetProductsDto): Promise<{
     data: Product[];
     total: number;
@@ -76,6 +124,23 @@ export class ProductsController {
   }
 
   @Get('upload-status/:id')
+  @ApiOperation({ summary: 'Get the status of a CSV upload job' })
+  @ApiResponse({
+    status: 200,
+    description: 'Upload status',
+    type: Object,
+    schema: {
+      properties: {
+        status: { type: 'string' },
+        processed: { type: 'number' },
+        errors: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/CsvError' },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Job not found' })
   async getUploadStatus(
     @Param('id') jobId: string,
   ): Promise<{ status: string; processed?: number; errors?: CsvError[] }> {

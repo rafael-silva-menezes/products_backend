@@ -8,6 +8,7 @@ import { IProductRepository } from '../../interfaces/product-repository.interfac
 import { CsvRow } from '../../../domain/models/csv-row.model';
 import { Product } from '../../../domain/entities/product.entity';
 import { Readable } from 'stream';
+import { ConfigService } from '@nestjs/config';
 
 type ProcessResult = {
   processed: number;
@@ -23,12 +24,16 @@ type RawCsvRow = {
 @Injectable()
 export class CsvProcessorService {
   private readonly logger = new Logger(CsvProcessorService.name);
-  private readonly batchSize = 10000;
+  private readonly batchSize: number;
 
   constructor(
     @Inject(IProductRepository)
     private readonly productRepository: IProductRepository,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.batchSize = this.configService.get<number>('BATCH_SIZE', 10000);
+    this.logger.log(`Initialized with batchSize: ${this.batchSize}`);
+  }
 
   async processCsvLines(
     filePath: string,
@@ -101,7 +106,7 @@ export class CsvProcessorService {
 
       if (error) {
         this.logger.warn(`Line ${rowIndex}: ${error}`);
-        result.errors.push({ line: rowIndex, error }); // Sempre adicionar o erro
+        result.errors.push({ line: rowIndex, error });
         return;
       }
 
@@ -111,7 +116,7 @@ export class CsvProcessorService {
     } catch (rowError) {
       const errorMsg = `Processing error - ${(rowError as Error).message}`;
       this.logger.error(`Line ${rowIndex}: ${errorMsg}`);
-      result.errors.push({ line: rowIndex, error: errorMsg }); // Sempre adicionar o erro
+      result.errors.push({ line: rowIndex, error: errorMsg });
     }
   }
 
@@ -136,7 +141,7 @@ export class CsvProcessorService {
     this.logger.error(
       `Stream processing failed at row ${rowIndex}: ${error.message}`,
     );
-    result.errors.push({ line: rowIndex, error: errorMsg }); // Sempre adicionar o erro
+    result.errors.push({ line: rowIndex, error: errorMsg });
   }
 
   private cleanupFile(filePath: string): void {

@@ -5,19 +5,23 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Logger } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common';
-import axios from 'axios';
-
-jest.mock('axios');
+import {
+  exchangeRatePrimaryMock,
+  exchangeRateFallbackMock,
+} from './exchange-rate.mock';
 
 describe('ExchangeRateService', () => {
   let service: ExchangeRateService;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockCacheManager: jest.Mocked<Cache>;
 
-  const mockRates = {
-    usd: { usd: 1, eur: 0.85, gbp: 0.75, jpy: 110, brl: 5.5 },
+  const expectedRates = {
+    USD: 1,
+    EUR: exchangeRatePrimaryMock.usd.eur,
+    GBP: exchangeRatePrimaryMock.usd.gbp,
+    JPY: exchangeRatePrimaryMock.usd.jpy,
+    BRL: exchangeRatePrimaryMock.usd.brl,
   };
-  const expectedRates = { USD: 1, EUR: 0.85, GBP: 0.75, JPY: 110, BRL: 5.5 };
 
   const primaryUrl =
     'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
@@ -38,8 +42,6 @@ describe('ExchangeRateService', () => {
       set: jest.fn().mockResolvedValue(undefined),
     } as any;
 
-    (axios.get as jest.Mock).mockReset();
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExchangeRateService,
@@ -50,6 +52,17 @@ describe('ExchangeRateService', () => {
     }).compile();
 
     service = module.get<ExchangeRateService>(ExchangeRateService);
+
+    // Mock do axios internamente no serviço
+    jest
+      .spyOn(service as any, 'fetchFromApi')
+      .mockImplementation((url: string) => {
+        if (url === primaryUrl)
+          return Promise.resolve({ data: exchangeRatePrimaryMock });
+        if (url === fallbackUrl)
+          return Promise.resolve({ data: exchangeRateFallbackMock });
+        return Promise.reject(new Error('Unknown URL'));
+      });
   });
 
   describe('fetchExchangeRates', () => {
@@ -60,19 +73,18 @@ describe('ExchangeRateService', () => {
 
       expect(result).toEqual(expectedRates);
       expect(mockCacheManager.get).toHaveBeenCalledWith('exchange_rates');
-      expect(axios.get).not.toHaveBeenCalled();
+      expect(service['fetchFromApi']).not.toHaveBeenCalled();
       expect(mockCacheManager.set).not.toHaveBeenCalled();
     });
 
     it('should fetch from primary API and cache rates when no cache exists', async () => {
       mockCacheManager.get.mockResolvedValue(null);
-      (axios.get as jest.Mock).mockResolvedValueOnce({ data: mockRates });
 
       const result = await service.fetchExchangeRates();
 
       expect(result).toEqual(expectedRates);
       expect(mockCacheManager.get).toHaveBeenCalledWith('exchange_rates');
-      expect(axios.get).toHaveBeenCalledWith(primaryUrl, expect.any(Object));
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(primaryUrl);
       expect(mockCacheManager.set).toHaveBeenCalledWith(
         'exchange_rates',
         expectedRates,
@@ -81,48 +93,60 @@ describe('ExchangeRateService', () => {
 
     it('should fetch from fallback API when primary fails and cache rates', async () => {
       mockCacheManager.get.mockResolvedValue(null);
-      (axios.get as jest.Mock)
-        .mockRejectedValueOnce(new Error('Primary API error'))
-        .mockResolvedValueOnce({ data: mockRates });
+      jest
+        .spyOn(service as any, 'fetchFromApi')
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error('Primary API error')),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({ data: exchangeRateFallbackMock }),
+        );
+
+      const fallbackRates = {
+        USD: 1,
+        EUR: exchangeRateFallbackMock.usd.eur,
+        GBP: exchangeRateFallbackMock.usd.gbp,
+        JPY: exchangeRateFallbackMock.usd.jpy,
+        BRL: exchangeRateFallbackMock.usd.brl,
+      };
 
       const result = await service.fetchExchangeRates();
 
-      expect(result).toEqual(expectedRates);
+      expect(result).toEqual(fallbackRates);
       expect(mockCacheManager.get).toHaveBeenCalledWith('exchange_rates');
-      expect(axios.get).toHaveBeenCalledWith(primaryUrl, expect.any(Object));
-      expect(axios.get).toHaveBeenCalledWith(fallbackUrl, expect.any(Object));
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(primaryUrl);
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(fallbackUrl);
       expect(mockCacheManager.set).toHaveBeenCalledWith(
         'exchange_rates',
-        expectedRates,
+        fallbackRates,
       );
     });
 
     it('should throw BadRequestException when both APIs fail', async () => {
       mockCacheManager.get.mockResolvedValue(null);
-      (axios.get as jest.Mock)
+      jest
+        .spyOn(service as any, 'fetchFromApi')
         .mockRejectedValueOnce(new Error('Primary API error'))
         .mockRejectedValueOnce(new Error('Fallback API error'));
 
       await expect(service.fetchExchangeRates()).rejects.toThrow(
-        new BadRequestException('Failed to fetch exchange rates'),
+        BadRequestException,
       );
-
       expect(mockCacheManager.get).toHaveBeenCalledWith('exchange_rates');
-      expect(axios.get).toHaveBeenCalledWith(primaryUrl, expect.any(Object));
-      expect(axios.get).toHaveBeenCalledWith(fallbackUrl, expect.any(Object));
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(primaryUrl);
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(fallbackUrl);
       expect(mockCacheManager.set).not.toHaveBeenCalled();
     });
 
     it('should return rates even if caching fails', async () => {
       mockCacheManager.get.mockResolvedValue(null);
-      (axios.get as jest.Mock).mockResolvedValueOnce({ data: mockRates });
       mockCacheManager.set.mockRejectedValueOnce(new Error('Cache error'));
 
       const result = await service.fetchExchangeRates();
 
       expect(result).toEqual(expectedRates);
       expect(mockCacheManager.get).toHaveBeenCalledWith('exchange_rates');
-      expect(axios.get).toHaveBeenCalledWith(primaryUrl, expect.any(Object));
+      expect(service['fetchFromApi']).toHaveBeenCalledWith(primaryUrl);
       expect(mockCacheManager.set).toHaveBeenCalledWith(
         'exchange_rates',
         expectedRates,

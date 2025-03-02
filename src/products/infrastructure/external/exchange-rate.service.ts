@@ -7,6 +7,10 @@ import axios from 'axios';
 import * as https from 'https';
 import { IExchangeRateService } from '../../application/interfaces/exchange-rate-service.interface';
 
+type CurrencyRateMap = {
+  [key: string]: number;
+};
+
 @Injectable()
 export class ExchangeRateService implements IExchangeRateService {
   private readonly logger = new Logger(ExchangeRateService.name);
@@ -16,11 +20,9 @@ export class ExchangeRateService implements IExchangeRateService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  async fetchExchangeRates(): Promise<{ [key: string]: number }> {
+  async fetchExchangeRates(): Promise<CurrencyRateMap> {
     const cacheKey = 'exchange_rates';
-    const cachedRates = await this.cacheManager.get<{ [key: string]: number }>(
-      cacheKey,
-    );
+    const cachedRates = await this.cacheManager.get<CurrencyRateMap>(cacheKey);
     if (cachedRates) {
       this.logger.log(
         `Returning cached exchange rates: ${JSON.stringify(cachedRates).slice(0, 100)}...`,
@@ -33,32 +35,16 @@ export class ExchangeRateService implements IExchangeRateService {
     const primaryUrl = this.configService.get('EXCHANGE_RATE_PRIMARY_URL');
     const fallbackUrl = this.configService.get('EXCHANGE_RATE_FALLBACK_URL');
 
-    let exchangeRates: { [key: string]: number };
+    let exchangeRates: CurrencyRateMap;
     try {
-      const response = await axios.get(primaryUrl, {
-        httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      });
+      const response = await this.fetchFromApi(primaryUrl);
       const rates = response.data.usd;
-      exchangeRates = {
-        USD: rates.usd || 1,
-        EUR: rates.eur,
-        GBP: rates.gbp,
-        JPY: rates.jpy,
-        BRL: rates.brl,
-      };
-    } catch (error) {
+      exchangeRates = this.extractRates(rates);
+    } catch {
       try {
-        const response = await axios.get(fallbackUrl, {
-          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-        });
+        const response = await this.fetchFromApi(fallbackUrl);
         const rates = response.data.usd;
-        exchangeRates = {
-          USD: rates.usd || 1,
-          EUR: rates.eur,
-          GBP: rates.gbp,
-          JPY: rates.jpy,
-          BRL: rates.brl,
-        };
+        exchangeRates = this.extractRates(rates);
       } catch (fallbackError) {
         this.logger.error(
           `Failed to fetch exchange rates: ${fallbackError.message}`,
@@ -72,11 +58,27 @@ export class ExchangeRateService implements IExchangeRateService {
       this.logger.log(
         `Successfully cached exchange rates with key: ${cacheKey}`,
       );
-    } catch (cacheError: any) {
+    } catch (cacheError) {
       this.logger.error(
         `Failed to cache exchange rates: ${cacheError.message}`,
       );
     }
     return exchangeRates;
+  }
+
+  private async fetchFromApi(url: string): Promise<any> {
+    return axios.get(url, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+    });
+  }
+
+  private extractRates(rates: any): CurrencyRateMap {
+    return {
+      USD: rates.usd || 1,
+      EUR: rates.eur,
+      GBP: rates.gbp,
+      JPY: rates.jpy,
+      BRL: rates.brl,
+    };
   }
 }

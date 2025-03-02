@@ -24,13 +24,15 @@ type RawCsvRow = {
 @Injectable()
 export class CsvProcessorService {
   private readonly logger = new Logger(CsvProcessorService.name);
-  private readonly batchSize = 10000;
+  private readonly batchSize: number = 10000;
 
   constructor(
     @Inject(IProductRepository)
     private readonly productRepository: IProductRepository,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.batchSize = this.configService.get<number>('BATCH_SIZE', 10000);
+  }
 
   async processCsvLines(
     filePath: string,

@@ -30,12 +30,8 @@ export class ExchangeRateService implements IExchangeRateService {
       this.logger.log(`No cached exchange rates found for key: ${cacheKey}`);
     }
 
-    const primaryUrl =
-      this.configService.get('EXCHANGE_RATE_PRIMARY_URL') ||
-      'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
-    const fallbackUrl =
-      this.configService.get('EXCHANGE_RATE_FALLBACK_URL') ||
-      'https://latest.currency-api.pages.dev/v1/currencies/usd.json';
+    const primaryUrl = this.configService.get('EXCHANGE_RATE_PRIMARY_URL');
+    const fallbackUrl = this.configService.get('EXCHANGE_RATE_FALLBACK_URL');
 
     let exchangeRates: { [key: string]: number };
     try {
@@ -76,7 +72,7 @@ export class ExchangeRateService implements IExchangeRateService {
       this.logger.log(
         `Successfully cached exchange rates with key: ${cacheKey}`,
       );
-    } catch (cacheError) {
+    } catch (cacheError: any) {
       this.logger.error(
         `Failed to cache exchange rates: ${cacheError.message}`,
       );

@@ -3,13 +3,13 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import * as https from 'https';
-import { IExchangeRateService } from '../../application/interfaces/exchange-rate-service.interface';
-
-type CurrencyRateMap = {
-  [key: string]: number;
-};
+import {
+  CurrencyRateMap,
+  ExchangeRateResponse,
+  IExchangeRateService,
+} from '../../application/interfaces/exchange-rate-service.interface';
 
 @Injectable()
 export class ExchangeRateService implements IExchangeRateService {
@@ -83,13 +83,15 @@ export class ExchangeRateService implements IExchangeRateService {
     return this.extractRates(response.data.usd);
   }
 
-  private async fetchFromApi(url: string): Promise<any> {
-    return axios.get(url, {
+  private async fetchFromApi(
+    url: string,
+  ): Promise<AxiosResponse<ExchangeRateResponse>> {
+    return axios.get<ExchangeRateResponse>(url, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
     });
   }
 
-  private extractRates(rates: any): CurrencyRateMap {
+  private extractRates(rates: ExchangeRateResponse['usd']): CurrencyRateMap {
     return {
       USD: rates.usd || 1,
       EUR: rates.eur,

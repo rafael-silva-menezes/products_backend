@@ -92,5 +92,27 @@ describe('ProductsController', () => {
       expect(csvQueueService.getJobStatus).toHaveBeenCalledWith(jobId);
       expect(result).toEqual({ status: 'completed' });
     });
+
+    it('should return detailed errors from upload status when job has errors', async () => {
+      const jobId = '123';
+      const mockStatus = {
+        status: 'completed',
+        processed: 0,
+        errors: [
+          {
+            line: 1,
+            error:
+              "'price' must be a valid non-negative number (e.g., 123 or 123.45), got 'abc'",
+          },
+          { line: 2, error: "'name' is missing or empty after sanitization" },
+        ],
+      };
+      csvQueueService.getJobStatus = jest.fn().mockResolvedValue(mockStatus);
+
+      const result = await controller.getUploadStatus(jobId);
+
+      expect(csvQueueService.getJobStatus).toHaveBeenCalledWith(jobId);
+      expect(result).toEqual(mockStatus);
+    });
   });
 });

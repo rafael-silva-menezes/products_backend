@@ -10,30 +10,12 @@ import { IExchangeRateService } from '../../application/interfaces/exchange-rate
 import { CsvQueueService } from './csv-queue.service';
 import { CsvError } from '../../domain/errors/csv-error';
 
-interface SplitCsvJobData {
-  filePath: string;
-}
-
-interface ChunkJobData {
-  filePath: string;
-}
-
-interface SplitCsvResult {
-  jobIds: string[];
-}
-
-interface ChunkResult {
-  processed: number;
-  errors: CsvError[];
-}
-
 @Processor('csv-processing', {
   concurrency: 4,
   limiter: { max: 2, duration: 1000 },
 })
 export class CsvQueueProcessor extends WorkerHost {
   private readonly logger = new Logger(CsvQueueProcessor.name);
-  private readonly chunkSize: number;
 
   constructor(
     private readonly csvProcessorService: CsvProcessorService,
@@ -43,129 +25,86 @@ export class CsvQueueProcessor extends WorkerHost {
     private readonly configService: ConfigService,
   ) {
     super();
-    this.chunkSize = parseInt(
-      this.configService.get<string>('CHUNK_SIZE', '1000000'),
-      10,
-    );
   }
 
-  async process(
-    job: Job<SplitCsvJobData | ChunkJobData>,
-  ): Promise<SplitCsvResult | ChunkResult> {
+  async process(job: Job<any>): Promise<any> {
     switch (job.name) {
       case 'split-csv':
-        return this.processSplitCsv(job as Job<SplitCsvJobData>);
+        return this.processSplitCsv(job as Job<{ filePath: string }>);
       case 'process-csv-chunk':
-        return this.processChunk(job as Job<ChunkJobData>);
+        return this.processChunk(job as Job<{ filePath: string }>);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
   }
 
   private async processSplitCsv(
-    job: Job<SplitCsvJobData>,
-  ): Promise<SplitCsvResult> {
+    job: Job<{ filePath: string }>,
+  ): Promise<{ jobIds: string[] }> {
     const { filePath } = job.data;
     this.logger.log(`Starting CSV split for file: ${filePath}`);
 
-    const chunkDir = this.ensureChunkDirectory();
-    const stream = this.createCsvStream(filePath);
-    const jobIds: string[] = [];
+    const chunkSize = parseInt(
+      this.configService.get('CHUNK_SIZE') || '1000000',
+      10,
+    );
+    const chunkDir = path.join(process.cwd(), 'uploads', 'chunks');
+    fs.mkdirSync(chunkDir, { recursive: true });
 
+    const jobs: string[] = [];
     let lineCount = 0;
     let chunkIndex = 0;
     let currentChunk: string[] = [];
-    let writeStream: fs.WriteStream | null = null;
+    let writeStream: fs.WriteStream | undefined;
 
-    try {
-      for await (const row of stream as AsyncIterable<string[]>) {
-        const rowString = row.join(';');
+    const stream = fs
+      .createReadStream(filePath)
+      .pipe(parse({ delimiter: ';' }));
 
-        if (lineCount === 0) {
-          currentChunk.push(rowString);
-          lineCount++;
-          continue;
-        }
-
-        if (lineCount % this.chunkSize === 1) {
-          await this.finishChunk(
-            writeStream,
-            currentChunk,
-            chunkDir,
-            chunkIndex,
-            jobIds,
-          );
-          currentChunk = [currentChunk[0]];
-          writeStream = this.createWriteStream(chunkDir, chunkIndex);
-          chunkIndex++;
-        }
-
+    for await (const row of stream) {
+      const rowString = row.join(';');
+      if (lineCount === 0) {
         currentChunk.push(rowString);
-        writeStream!.write(`${rowString}\n`);
         lineCount++;
+        continue;
       }
 
-      await this.finishChunk(
-        writeStream,
-        currentChunk,
-        chunkDir,
-        chunkIndex,
-        jobIds,
-      );
-      fs.unlinkSync(filePath);
-      this.logger.log(`CSV split into ${jobIds.length} chunks and enqueued`);
+      if (lineCount % chunkSize === 1) {
+        if (writeStream) {
+          writeStream.end();
+          const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
+          jobs.push(await this.csvQueueService.enqueueProcessChunk(chunkPath));
+          chunkIndex++;
+        }
+        currentChunk = [currentChunk[0]];
+        writeStream = fs.createWriteStream(
+          path.join(chunkDir, `chunk-${chunkIndex}.csv`),
+        );
+      }
 
-      return { jobIds };
-    } catch (error) {
-      this.logger.error(`Failed to split CSV: ${error.message}`);
-      throw error;
+      currentChunk.push(rowString);
+      writeStream!.write(rowString + '\n');
+      lineCount++;
     }
-  }
 
-  private async processChunk(job: Job<ChunkJobData>): Promise<ChunkResult> {
-    const { filePath } = job.data;
-    const exchangeRates = await this.exchangeRateService.fetchExchangeRates();
-    return this.csvProcessorService.processCsvLines(filePath, exchangeRates);
-  }
-
-  private ensureChunkDirectory(): string {
-    const chunkDir = path.join(process.cwd(), 'uploads', 'chunks');
-    fs.mkdirSync(chunkDir, { recursive: true });
-    return chunkDir;
-  }
-
-  private createCsvStream(filePath: string): NodeJS.ReadableStream {
-    return fs.createReadStream(filePath).pipe(
-      parse({
-        delimiter: ';',
-        cast: false, // Garante que os valores sejam strings
-      }),
-    );
-  }
-
-  private createWriteStream(
-    chunkDir: string,
-    chunkIndex: number,
-  ): fs.WriteStream {
-    return fs.createWriteStream(path.join(chunkDir, `chunk-${chunkIndex}.csv`));
-  }
-
-  private async finishChunk(
-    writeStream: fs.WriteStream | null,
-    currentChunk: string[],
-    chunkDir: string,
-    chunkIndex: number,
-    jobIds: string[],
-  ): Promise<void> {
-    if (writeStream && currentChunk.length > 1) {
-      await new Promise<void>((resolve, reject) => {
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-        writeStream.end();
-      });
+    if (currentChunk.length > 1 && writeStream) {
+      writeStream.end();
       const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}.csv`);
-      const jobId = await this.csvQueueService.enqueueProcessChunk(chunkPath);
-      jobIds.push(jobId);
+      jobs.push(await this.csvQueueService.enqueueProcessChunk(chunkPath));
     }
+
+    fs.unlinkSync(filePath);
+    this.logger.log(`CSV split into ${jobs.length} chunks and enqueued`);
+    return { jobIds: jobs };
+  }
+
+  private async processChunk(
+    job: Job<{ filePath: string }>,
+  ): Promise<{ processed: number; errors: CsvError[] }> {
+    const exchangeRates = await this.exchangeRateService.fetchExchangeRates();
+    return await this.csvProcessorService.processCsvLines(
+      job.data.filePath,
+      exchangeRates,
+    );
   }
 }

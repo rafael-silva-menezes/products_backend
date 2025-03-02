@@ -17,7 +17,7 @@ export class CsvUploadService {
 
   async uploadCsv(
     file: Express.Multer.File,
-  ): Promise<{ message: string; jobId: string }> {
+  ): Promise<{ message: string; jobIds: string[] }> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
@@ -29,10 +29,20 @@ export class CsvUploadService {
     );
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
+
+    // Aguarda o job split-csv completar para obter os jobIds dos chunks
+    await job.waitUntilFinished(this.csvQueue.events);
+    const result = await job.returnvalue;
+    const jobIds = result.jobIds as string[];
+
+    if (!jobIds || jobIds.length === 0) {
+      throw new BadRequestException('No chunk jobs were created');
+    }
+
     await this.invalidateProductCache();
     return {
       message: 'File upload accepted for processing',
-      jobId: job.id as string,
+      jobIds,
     };
   }
 

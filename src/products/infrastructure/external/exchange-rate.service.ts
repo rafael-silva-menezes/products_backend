@@ -32,22 +32,31 @@ export class ExchangeRateService implements IExchangeRateService {
       this.logger.log(`No cached exchange rates found for key: ${cacheKey}`);
     }
 
-    const primaryUrl = this.configService.get('EXCHANGE_RATE_PRIMARY_URL');
-    const fallbackUrl = this.configService.get('EXCHANGE_RATE_FALLBACK_URL');
+    const primaryUrl = this.configService.get<string>(
+      'EXCHANGE_RATE_PRIMARY_URL',
+    );
+    const fallbackUrl = this.configService.get<string>(
+      'EXCHANGE_RATE_FALLBACK_URL',
+    );
+
+    if (!primaryUrl || !fallbackUrl) {
+      throw new BadRequestException(
+        'Exchange rate URLs are not properly configured',
+      );
+    }
 
     let exchangeRates: CurrencyRateMap;
     try {
-      const response = await this.fetchFromApi(primaryUrl);
-      const rates = response.data.usd;
-      exchangeRates = this.extractRates(rates);
-    } catch {
+      exchangeRates = await this.fetchRatesFromUrl(primaryUrl);
+    } catch (primaryError) {
+      this.logger.error(
+        `Primary URL failed: ${primaryError instanceof Error ? primaryError.message : primaryError}`,
+      );
       try {
-        const response = await this.fetchFromApi(fallbackUrl);
-        const rates = response.data.usd;
-        exchangeRates = this.extractRates(rates);
+        exchangeRates = await this.fetchRatesFromUrl(fallbackUrl);
       } catch (fallbackError) {
         this.logger.error(
-          `Failed to fetch exchange rates: ${fallbackError.message}`,
+          `Fallback URL also failed: ${fallbackError instanceof Error ? fallbackError.message : fallbackError}`,
         );
         throw new BadRequestException('Failed to fetch exchange rates');
       }
@@ -60,10 +69,18 @@ export class ExchangeRateService implements IExchangeRateService {
       );
     } catch (cacheError) {
       this.logger.error(
-        `Failed to cache exchange rates: ${cacheError.message}`,
+        `Failed to cache exchange rates: ${cacheError instanceof Error ? cacheError.message : cacheError}`,
       );
     }
     return exchangeRates;
+  }
+
+  private async fetchRatesFromUrl(url: string): Promise<CurrencyRateMap> {
+    const response = await this.fetchFromApi(url);
+    if (!response.data?.usd) {
+      throw new Error('Invalid response structure');
+    }
+    return this.extractRates(response.data.usd);
   }
 
   private async fetchFromApi(url: string): Promise<any> {

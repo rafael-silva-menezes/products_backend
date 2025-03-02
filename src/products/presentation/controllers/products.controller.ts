@@ -26,6 +26,7 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { CsvError } from '@domain/errors/csv-error';
+import { ConfigService } from '@nestjs/config';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -45,6 +46,7 @@ export class ProductsController {
   @HttpCode(202)
   @UseInterceptors(
     FileInterceptor('file', {
+      limits: { fileSize: 1000 * 1024 * 1024 },
       storage: diskStorage({
         destination: './uploads',
         filename: (req, file, cb) => {

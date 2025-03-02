@@ -62,7 +62,7 @@ export class CsvQueueProcessor extends WorkerHost {
       .pipe(parse({ delimiter: ';' }));
 
     for await (const row of stream) {
-      const rowString = row.join(';');
+      const rowString = (row as string[]).join(';');
       if (lineCount === 0) {
         currentChunk.push(rowString);
         lineCount++;

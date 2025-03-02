@@ -33,13 +33,13 @@ describe('CsvUploadService', () => {
         id: '123',
         waitUntilFinished: jest.fn().mockResolvedValue({ jobIds: ['124'] }),
       }),
-    } as any;
+    } as unknown as jest.Mocked<Queue>;
 
     mockCacheManager = {
       get: jest.fn(),
       set: jest.fn(),
       del: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    } as unknown as jest.Mocked<Cache>;
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [

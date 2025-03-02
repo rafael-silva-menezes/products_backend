@@ -5,15 +5,22 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, QueueEvents } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import {
+  CsvJobData,
+  CsvJobResult,
+  CsvUploadResponse,
+  ICsvUploadService,
+} from '../../interfaces/csv-upload.interface';
 
 @Injectable()
-export class CsvUploadService {
+export class CsvUploadService implements ICsvUploadService {
   private readonly logger = new Logger(CsvUploadService.name);
   private productCacheKeys: Set<string> = new Set();
   private readonly queueEvents: QueueEvents;
 
   constructor(
-    @InjectQueue('csv-processing') private csvQueue: Queue,
+    @InjectQueue('csv-processing')
+    private csvQueue: Queue<CsvJobData, CsvJobResult>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private configService: ConfigService,
   ) {
@@ -26,9 +33,7 @@ export class CsvUploadService {
     });
   }
 
-  async uploadCsv(
-    file: Express.Multer.File,
-  ): Promise<{ message: string; jobIds: string[] }> {
+  async uploadCsv(file: Express.Multer.File): Promise<CsvUploadResponse> {
     if (!file || !file.mimetype.includes('csv')) {
       throw new BadRequestException('Please upload a valid CSV file');
     }
@@ -41,8 +46,9 @@ export class CsvUploadService {
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
 
+    // Use CsvJobResult type explicitly:
     const result = await job.waitUntilFinished(this.queueEvents);
-    const jobIds = result.jobIds as string[];
+    const jobIds = result.jobIds;
 
     if (!jobIds || jobIds.length === 0) {
       throw new BadRequestException('No chunk jobs were created');
@@ -69,12 +75,13 @@ export class CsvUploadService {
         `Invalidated ${this.productCacheKeys.size} product cache keys`,
       );
       this.productCacheKeys.clear();
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to invalidate product cache: ${error.message}`);
     }
   }
 
-  addCacheKey(key: string) {
+  // Add explicit return type:
+  addCacheKey(key: string): void {
     this.productCacheKeys.add(key);
   }
 }

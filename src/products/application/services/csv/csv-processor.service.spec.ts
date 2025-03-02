@@ -14,8 +14,10 @@ describe('CsvProcessorService', () => {
   const mockFilePath = 'test.csv';
 
   const mockProductRepo = {
-    saveProducts: jest.fn().mockResolvedValue(undefined),
-    getProducts: jest.fn(),
+    saveProducts: jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(undefined)),
+    getProducts: jest.fn().mockImplementation(() => undefined),
   };
 
   beforeEach(async () => {
@@ -42,7 +44,7 @@ describe('CsvProcessorService', () => {
       const mockStream = Readable.from(['Apple;1.99;2023-12-31']);
       jest
         .spyOn(fs, 'createReadStream')
-        .mockReturnValue(mockStream as fs.ReadStream);
+        .mockImplementation(() => mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -63,7 +65,7 @@ describe('CsvProcessorService', () => {
       const mockStream = Readable.from([';1.99;2023-12-31']);
       jest
         .spyOn(fs, 'createReadStream')
-        .mockReturnValue(mockStream as fs.ReadStream);
+        .mockImplementation(() => mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -81,7 +83,7 @@ describe('CsvProcessorService', () => {
       const mockStream = Readable.from(['Banana;abc;2023-12-31']);
       jest
         .spyOn(fs, 'createReadStream')
-        .mockReturnValue(mockStream as fs.ReadStream);
+        .mockImplementation(() => mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);
@@ -103,7 +105,7 @@ describe('CsvProcessorService', () => {
       const mockStream = Readable.from(['Cherry;2.50;invalid-date']);
       jest
         .spyOn(fs, 'createReadStream')
-        .mockReturnValue(mockStream as fs.ReadStream);
+        .mockImplementation(() => mockStream as fs.ReadStream);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.processCsvLines(mockFilePath, exchangeRates);

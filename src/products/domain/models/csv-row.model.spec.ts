@@ -3,7 +3,7 @@ import { Product } from '../../domain/entities/product.entity';
 
 describe('CsvRow', () => {
   const exchangeRates = { USD: 1, EUR: 0.85, GBP: 0.73, JPY: 110, BRL: 5.2 };
-  const sanitize = (input: string) => input.replace(/<[^>]+>/g, '').trim(); // Mock simples para sanitização
+  const sanitize = (input: string) => input.replace(/<[^>]+>/g, '').trim();
 
   describe('toProduct', () => {
     it('should create a product with valid data', () => {
@@ -50,12 +50,14 @@ describe('CsvRow', () => {
       );
     });
 
-    it('should accept null or empty price as null', () => {
+    it('should return an error for empty price', () => {
       const csvRow = new CsvRow('Test Product', '', '2025-03-01');
       const result = csvRow.toProduct(exchangeRates, sanitize);
 
-      expect(result.product).toBeDefined();
-      expect(result.product!.price).toBeNull();
+      expect(result.product).toBeUndefined();
+      expect(result.error).toBe(
+        "'price' must be a valid non-negative number (e.g., 123 or 123.45), got 'empty'",
+      );
     });
 
     it('should return an error for invalid expiration date format', () => {
@@ -78,12 +80,14 @@ describe('CsvRow', () => {
       );
     });
 
-    it('should accept null or empty expiration as null', () => {
+    it('should return an error for empty expiration', () => {
       const csvRow = new CsvRow('Test Product', '123.45', '');
       const result = csvRow.toProduct(exchangeRates, sanitize);
 
-      expect(result.product).toBeDefined();
-      expect(result.product!.expiration).toBeNull();
+      expect(result.product).toBeUndefined();
+      expect(result.error).toBe(
+        "'expiration' must be a valid date in YYYY-MM-DD format (e.g., 2023-12-31), got 'empty'",
+      );
     });
   });
 });

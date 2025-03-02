@@ -10,12 +10,12 @@ export class Product {
   name: string;
 
   @Index()
-  @Column('decimal', { nullable: true })
-  price: number | null;
+  @Column('decimal')
+  price: number;
 
   @Index()
-  @Column('text', { nullable: true })
-  expiration: string | null;
+  @Column('text')
+  expiration: string;
 
   @Column('json')
   exchangeRates: { [key: string]: number };

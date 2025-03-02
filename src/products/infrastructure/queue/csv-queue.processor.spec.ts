@@ -73,8 +73,8 @@ describe('CsvQueueProcessor', () => {
 
       const result = await csvQueueProcessor.process(job);
       expect(csvQueueService.enqueueProcessChunk).toHaveBeenCalledTimes(1);
-      expect('jobIds' in result).toBeTruthy(); // Verifica se é SplitCsvResult
-      expect((result as { jobIds: string[] }).jobIds).toEqual(['dummy-job-id']); // Cast seguro
+      expect('jobIds' in result).toBeTruthy();
+      expect((result as { jobIds: string[] }).jobIds).toEqual(['dummy-job-id']);
       expect(fs.existsSync(tempFilePath)).toBeFalsy();
     });
 
@@ -99,7 +99,7 @@ describe('CsvQueueProcessor', () => {
         'dummy-chunk-file.csv',
         dummyExchangeRates,
       );
-      expect('processed' in result && 'errors' in result).toBeTruthy(); // Verifica se é ChunkResult
+      expect('processed' in result && 'errors' in result).toBeTruthy();
       expect(result).toEqual(expectedResult);
     });
   });

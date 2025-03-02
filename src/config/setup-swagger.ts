@@ -9,6 +9,8 @@ export function setupSwagger(app: INestApplication, logger: Logger): void {
     .addTag('products')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api', app, document, {
+    jsonDocumentUrl: 'swagger/json',
+  });
   logger.log('Swagger documentation available at /api');
 }

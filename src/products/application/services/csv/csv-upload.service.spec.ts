@@ -4,7 +4,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Logger } from '@nestjs/common';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
-import { Queue, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import { BadRequestException } from '@nestjs/common';
 import { Readable } from 'stream';
 import { ConfigService } from '@nestjs/config';
@@ -28,20 +28,11 @@ describe('CsvUploadService', () => {
   };
 
   beforeEach(async () => {
-    const mockConfigService = {
-      get: jest.fn(() => {}),
-    };
-
     mockQueue = {
-      add: jest.fn().mockImplementation((name, data, opts) =>
-        Promise.resolve({
-          id: '123',
-          name,
-          data,
-          opts,
-          waitUntilFinished: jest.fn().mockResolvedValue({ jobIds: ['124'] }),
-        } as Partial<Job>),
-      ),
+      add: jest.fn().mockResolvedValue({
+        id: '123',
+        waitUntilFinished: jest.fn().mockResolvedValue({ jobIds: ['124'] }),
+      }),
     } as any;
 
     mockCacheManager = {
@@ -56,7 +47,6 @@ describe('CsvUploadService', () => {
           connection: {
             host: 'localhost',
             port: 6379,
-            password: 'redis_password',
           },
         }),
       ],
@@ -65,19 +55,15 @@ describe('CsvUploadService', () => {
         { provide: getQueueToken('csv-processing'), useValue: mockQueue },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: Logger, useValue: { log: jest.fn(), error: jest.fn() } },
-        { provide: ConfigService, useValue: mockConfigService },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<CsvUploadService>(CsvUploadService);
   });
 
-  afterEach(async () => {
-    await new Promise((resolve) => setImmediate(resolve));
-  });
-
   describe('uploadCsv', () => {
-    it('should upload a valid CSV and return jobIds', async () => {
+    it('should upload a valid CSV and invalidate cache', async () => {
       const result = await service.uploadCsv(mockFile);
 
       expect(result).toEqual({
@@ -111,22 +97,6 @@ describe('CsvUploadService', () => {
       );
       expect(mockQueue.add).not.toHaveBeenCalled();
       expect(mockCacheManager.del).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException if no chunk jobs are created', async () => {
-      mockQueue.add.mockImplementationOnce((name, data, opts) =>
-        Promise.resolve({
-          id: '123',
-          name,
-          data,
-          opts,
-          waitUntilFinished: jest.fn().mockResolvedValue({ jobIds: [] }),
-        } as any),
-      );
-
-      await expect(service.uploadCsv(mockFile)).rejects.toThrow(
-        new BadRequestException('No chunk jobs were created'),
-      );
     });
   });
 

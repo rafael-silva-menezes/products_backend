@@ -27,7 +27,6 @@ import { AppDataSource } from './config/data-source';
         connection: {
           host: configService.get('REDIS_HOST') || 'localhost',
           port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
-          password: configService.get('REDIS_PASSWORD') || undefined,
         },
       }),
       inject: [ConfigService],
@@ -40,7 +39,6 @@ import { AppDataSource } from './config/data-source';
           store: redisStore,
           host: String(configService.get('REDIS_HOST')) || 'localhost',
           port: parseInt(configService.get('REDIS_PORT') || '6379', 10),
-          password: String(configService.get('REDIS_PASSWORD')) || undefined,
           ttl: 3600,
         };
         return redisConfig;

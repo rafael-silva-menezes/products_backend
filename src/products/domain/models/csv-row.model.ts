@@ -8,7 +8,7 @@ export class CsvRow {
   ) {}
 
   toProduct(
-    exchangeRates: { [key: string]: number },
+    exchangeRates: Record<string, number>,
     sanitize: (input: string) => string,
   ): { product?: Product; error?: string } {
     const sanitizedName = sanitize(this.name).trim();
@@ -20,15 +20,22 @@ export class CsvRow {
       return { error: "'name' is missing or empty after sanitization" };
     }
 
-    if (priceStr !== '' && (price === null || isNaN(price) || price < 0)) {
+    const priceRegex = /^\d+(\.\d{1,2})?$/;
+    if (
+      priceStr !== '' &&
+      (!priceRegex.test(priceStr) ||
+        price === null ||
+        isNaN(price) ||
+        price < 0)
+    ) {
       return {
-        error: `'price' must be a valid non-negative number (e.g., 123.45), got '${priceStr}'`,
+        error: `'price' must be a valid non-negative number (e.g., 123 or 123.45), got '${priceStr}'`,
       };
     }
 
     if (expiration && !this.isValidDate(expiration)) {
       return {
-        error: `'expiration' must be a valid date in YYYY-MM-DD format, got '${expiration}'`,
+        error: `'expiration' must be a valid date in YYYY-MM-DD format (e.g., 2023-12-31), got '${expiration}'`,
       };
     }
 

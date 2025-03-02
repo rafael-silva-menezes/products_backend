@@ -36,7 +36,7 @@ describe('CsvRow', () => {
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'price' must be a valid non-negative number (e.g., 123.45), got 'abc'",
+        "'price' must be a valid non-negative number (e.g., 123 or 123.45), got 'abc'",
       );
     });
 
@@ -46,7 +46,7 @@ describe('CsvRow', () => {
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'price' must be a valid non-negative number (e.g., 123.45), got '-123.45'",
+        "'price' must be a valid non-negative number (e.g., 123 or 123.45), got '-123.45'",
       );
     });
 
@@ -64,7 +64,7 @@ describe('CsvRow', () => {
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'expiration' must be a valid date in YYYY-MM-DD format, got '2025-13-01'",
+        "'expiration' must be a valid date in YYYY-MM-DD format (e.g., 2023-12-31), got '2025-13-01'",
       );
     });
 
@@ -74,7 +74,7 @@ describe('CsvRow', () => {
 
       expect(result.product).toBeUndefined();
       expect(result.error).toBe(
-        "'expiration' must be a valid date in YYYY-MM-DD format, got '2025-02-30'",
+        "'expiration' must be a valid date in YYYY-MM-DD format (e.g., 2023-12-31), got '2025-02-30'",
       );
     });
 

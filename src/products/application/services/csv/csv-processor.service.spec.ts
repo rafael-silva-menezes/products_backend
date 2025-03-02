@@ -100,7 +100,7 @@ describe('CsvProcessorService', () => {
           {
             line: 1,
             error:
-              "'price' must be a valid non-negative number (e.g., 123.45), got 'abc'",
+              "'price' must be a valid non-negative number (e.g., 123 or 123.45), got 'abc'",
           },
         ],
       });
@@ -122,7 +122,7 @@ describe('CsvProcessorService', () => {
           {
             line: 1,
             error:
-              "'expiration' must be a valid date in YYYY-MM-DD format, got 'invalid-date'",
+              "'expiration' must be a valid date in YYYY-MM-DD format (e.g., 2023-12-31), got 'invalid-date'",
           },
         ],
       });

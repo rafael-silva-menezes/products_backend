@@ -53,7 +53,6 @@ describe('ExchangeRateService', () => {
 
     service = module.get<ExchangeRateService>(ExchangeRateService);
 
-    // Mock do axios internamente no serviço
     jest
       .spyOn(service as any, 'fetchFromApi')
       .mockImplementation((url: string) => {

@@ -38,11 +38,16 @@ export class CsvRow {
       };
     }
 
+    const convertedExchangeRates: Record<string, number> = {};
+    for (const [currency, rate] of Object.entries(exchangeRates)) {
+      convertedExchangeRates[currency] = parseFloat((price * rate).toFixed(2));
+    }
+
     const product = new Product();
     product.name = sanitizedName;
     product.price = price;
     product.expiration = expiration;
-    product.exchangeRates = exchangeRates;
+    product.exchangeRates = convertedExchangeRates;
     return { product };
   }
 

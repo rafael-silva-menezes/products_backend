@@ -55,7 +55,10 @@ describe('CsvProcessorService', () => {
           name: 'Apple',
           price: 1.99,
           expiration: '2023-12-31',
-          exchangeRates,
+          exchangeRates: {
+            USD: 1.99,
+            EUR: 1.69,
+          },
         }),
       ]);
       expect(fs.unlinkSync).toHaveBeenCalledWith(mockFilePath);

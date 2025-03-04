@@ -46,7 +46,6 @@ export class CsvUploadService implements ICsvUploadService {
 
     this.logger.log(`CSV upload job enqueued with ID: ${job.id}`);
 
-    // Use CsvJobResult type explicitly:
     const result = await job.waitUntilFinished(this.queueEvents);
     const jobIds = result.jobIds;
 
@@ -80,7 +79,6 @@ export class CsvUploadService implements ICsvUploadService {
     }
   }
 
-  // Add explicit return type:
   addCacheKey(key: string): void {
     this.productCacheKeys.add(key);
   }

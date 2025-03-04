@@ -1,12 +1,12 @@
+import { Product } from '@domain/entities/product.entity';
 import { CsvRow } from './csv-row.model';
-import { Product } from '../../domain/entities/product.entity';
 
 describe('CsvRow', () => {
   const exchangeRates = { USD: 1, EUR: 0.85, GBP: 0.73, JPY: 110, BRL: 5.2 };
   const sanitize = (input: string) => input.replace(/<[^>]+>/g, '').trim();
 
   describe('toProduct', () => {
-    it('should create a product with valid data', () => {
+    it('should create a product with valid data and converted exchange rates', () => {
       const csvRow = new CsvRow('Test Product', '123.45', '2025-03-01');
       const result = csvRow.toProduct(exchangeRates, sanitize);
 
@@ -16,7 +16,13 @@ describe('CsvRow', () => {
         name: 'Test Product',
         price: 123.45,
         expiration: '2025-03-01',
-        exchangeRates,
+        exchangeRates: {
+          USD: 123.45,
+          EUR: 104.93,
+          GBP: 90.12,
+          JPY: 13579.5,
+          BRL: 641.94,
+        },
       } as Partial<Product>);
     });
 

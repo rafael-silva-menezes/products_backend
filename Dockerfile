@@ -1,21 +1,33 @@
-# Use Node.js LTS as base image
-FROM node:18-alpine
+FROM node:20-alpine AS builder
 
-# Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Install dependencies required for sqlite3
-RUN apk add --no-cache python3 make g++ # Necessário para compilar sqlite3
+COPY package.json package-lock.json ./
 
-# Copy package.json and install dependencies
-COPY package*.json ./
-RUN npm install
+RUN npm install --frozen-lockfile
 
-# Copy source code
 COPY . .
 
-# Expose port
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/uploads ./uploads
+COPY --from=builder /app/src/config ./src/config 
+
+RUN npm install --production --frozen-lockfile
+
+RUN mkdir -p ./uploads/chunks
+
+RUN npm install -g typeorm
+
+CMD ["sh", "-c", "typeorm migration:run -d ./dist/config/data-source.js && node dist/main.js"]
+
 EXPOSE 8000
 
-# Start the app
-CMD ["npm", "run", "start:dev"]
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost:8000/ || exit 1

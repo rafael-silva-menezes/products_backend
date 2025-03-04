@@ -1,99 +1,166 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Flatirons Backend (NestJS)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This is the backend application for the Flatirons project, built with NestJS. It handles CSV file uploads, processes them asynchronously, integrates exchange rates, and serves product data via RESTful endpoints. The application is designed to be scalable, secure, and robust, supporting large files (up to 1GB or 200k+ lines) with efficient processing and storage.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Project Overview
 
-## Description
+The Flatirons Backend fulfills the core requirements of the challenge by providing a system to:
+- Accept CSV uploads containing product data (`name`, `price`, `expiration`).
+- Process these files in the background, integrating exchange rates from an external API.
+- Store processed products in a PostgreSQL database with calculated exchange rate values.
+- Serve the data with pagination, filtering, and sorting capabilities.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+### What We Did
+- **CSV Upload and Processing**:
+  - Implemented `POST /products/upload` to accept CSV files up to 1GB, returning job IDs (`ProductsController`, `CsvUploadService`).
+  - Split large files into chunks (`CHUNK_SIZE` configurable) and processed them asynchronously using BullMQ with streams (`CsvQueueProcessor`, `CsvProcessorService`).
+  - Validated and sanitized CSV rows (`CsvRow.toProduct`), converting `price` into exchange rate values (`exchangeRates`) for multiple currencies.
 
-## Project setup
+- **Exchange Rate Integration**:
+  - Fetched rates from `https://github.com/fawazahmed0/exchange-api` (`ExchangeRateService`), cached in Redis for performance.
+  - Calculated converted values (e.g., `price * rate`) stored in `exchangeRates` for each product.
 
-```bash
-$ npm install
-```
+- **Data Storage and Retrieval**:
+  - Saved products in PostgreSQL with `ProductRepository`, using TypeORM migrations (`config/migrations`).
+  - Provided `GET /products` with pagination, filtering (`name`, `price`, `expiration`), and sorting (`name`, `price`, `expiration`, ASC/DESC) via `ProductQueryService`.
+  - Added `GET /products/upload-status/:id` for polling job status (`CsvQueueService`).
 
-## Compile and run the project
+- **Testing and Robustness**:
+  - Added unit tests for services (`csv-processor.service.spec.ts`, etc.) and integration tests (`products.controller.spec.ts`) using Jest.
+  - Implemented file validation (CSV only), sanitization (`sanitize-html`), and a 60s timeout for API calls.
 
-```bash
-# development
-$ npm run start
+### Challenge Requirements Fulfilled
+- **Storage with Exchange Rates**: Products stored with `id`, `name`, `price`, `expiration`, and `exchangeRates` (converted values for USD, EUR, GBP, JPY, BRL).
+- **Product Query Endpoint**: `GET /products` supports pagination, filtering, and sorting.
+- **Large CSV Support**: Handles 200k+ lines with streams and BullMQ (4 workers).
+- **CSV Validation**: Rejects non-CSV files and reports per-line errors.
+- **Sanitization**: Sanitizes `name` and validates `price` (non-negative numbers) and `expiration` (YYYY-MM-DD).
+- **Background Processing**: Uses BullMQ for scalability.
+- **HTTP Status**: Returns 202 for `POST /products/upload`.
+- **Environment Configuration**: Loads settings via `@nestjs/config` from `.env`.
 
-# watch mode
-$ npm run start:dev
+### Technologies Used
+- **NestJS**: Framework for modular architecture.
+- **TypeScript**: Strong typing with interfaces and DTOs.
+- **TypeORM**: ORM for PostgreSQL with migrations.
+- **BullMQ**: Background job processing with Redis.
+- **Redis**: Caching exchange rates and queuing jobs.
+- **Axios**: HTTP client for exchange rate API.
+- **Sanitize-HTML**: XSS protection for `name`.
+- **Jest**: Unit and integration testing.
+- **Swagger**: API documentation.
 
-# production mode
-$ npm run start:prod
-```
+### Improvements Implemented
+- **Scalability**: Stream-based processing, configurable chunk sizes (`CHUNK_SIZE`), and multiple workers (`WORKER_CONCURRENCY`).
+- **Performance**: Cached exchange rates in Redis, optimized database queries with indices.
+- **Robustness**: Retry logic (3 attempts) in BullMQ, detailed error reporting, and cache invalidation on uploads.
+- **Code Quality**: Layered architecture (controllers, services, repositories), strong typing, and comprehensive tests.
+- **Bug Fix**: Adjusted `ProductQueryService` to cache only non-empty results, ensuring fresh data retrieval.
 
-## Run tests
+## Future Improvements
+- **Real-Time Feedback**: Implement WebSocket (`@nestjs/websockets`) in `CsvQueueProcessor` for incremental progress updates.
+- **Chunked Uploads**: Add `POST /products/upload/chunk` to handle file parts, improving large file uploads.
+- **Dynamic Batching**: Adjust `CHUNK_SIZE` based on file size or system load.
+- **Security**: Add API key authentication (`@nestjs/passport`) and log injection attempts.
+- **Monitoring**: Replace NestJS `Logger` with Winston for detailed logging.
+- **Additional Endpoint**: Implement `GET /products/:id` for single product retrieval.
 
-```bash
-# unit tests
-$ npm run test
+## Getting Started
 
-# e2e tests
-$ npm run test:e2e
+### Prerequisites
+- **Node.js**: Version 18.x or higher (recommended: 20.x for NestJS compatibility).
+- **npm**: Version 8.x or higher.
+- **Docker**: Required for Redis and PostgreSQL via `docker-compose`.
 
-# test coverage
-$ npm run test:cov
-```
+### Installation
+1. **Clone the Repository**:
+   ```bash
+   git clone <repository-url>
+   cd flatirons_backend
+   ```
 
-## Deployment
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+3. **Set Environment Variables**:
+   - Create a `.env` file in the root directory with the following (adjust as needed):
+     ```
+     PORT=8000
+     CORS_ORIGIN=http://localhost:3000
+     REDIS_HOST=localhost
+     REDIS_PORT=6379
+     DATABASE_TYPE=postgres
+     DATABASE_HOST=localhost
+     DATABASE_PORT=5432
+     DATABASE_USERNAME=postgres
+     DATABASE_PASSWORD=postgres
+     DATABASE_NAME=products_db
+     EXCHANGE_RATE_PRIMARY_URL=https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json
+     EXCHANGE_RATE_FALLBACK_URL=https://latest.currency-api.pages.dev/v1/currencies/usd.json
+     BATCH_SIZE=10000
+     JOB_ATTEMPTS=3
+     JOB_BACKOFF_DELAY=1000
+     CHUNK_SIZE=1000000
+     WORKER_CONCURRENCY=8
+     IGNORE_INVALID_LINES=false
+     LOG_LEVEL=info
+     ```
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Running the Application
+1. **Development Mode with All Services**:
+   ```bash
+   npm run start:dev-all
+   ```
+   - Starts Redis and PostgreSQL via `docker-compose up -d`.
+   - Runs TypeORM migrations (`npm run migration:run`).
+   - Launches the NestJS app in watch mode (`npm run start:dev`) on `http://localhost:8000`.
 
-```bash
-$ npm install -g mau
-$ mau deploy
-```
+2. **Development Mode (App Only)**:
+   - Ensure Redis and PostgreSQL are running externally (e.g., via `docker-compose up -d`).
+   - Run migrations:
+     ```bash
+     npm run migration:run
+     ```
+   - Start the app:
+     ```bash
+     npm run start:dev
+     ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+3. **Production Mode**:
+   - Build the app:
+     ```bash
+     npm run build
+     ```
+   - Start Redis and PostgreSQL:
+     ```bash
+     docker-compose up -d
+     ```
+   - Run migrations:
+     ```bash
+     npm run migration:run
+     ```
+   - Start the app:
+     ```bash
+     npm run start:prod
+     ```
 
-## Resources
+### Running Tests
+- **Unit and Integration Tests**:
+  ```bash
+  npm run test
+  ```
+- **Verbose Output**:
+  ```bash
+  npm run test -- --verbose
+  ```
+- **End-to-End Tests**:
+  ```bash
+  npm run test:e2e
+  ```
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Notes
+- The backend assumes Redis (`localhost:6379`) and PostgreSQL (`localhost:5432`) are available. Adjust `.env` if using different hosts/ports.
+- Ensure the frontend (e.g., `http://localhost:3000`) is running for full integration.
+- Large file processing (e.g., 900MB, 205k+ lines) is optimized with streams and BullMQ, but real-time progress requires WebSocket enhancements.

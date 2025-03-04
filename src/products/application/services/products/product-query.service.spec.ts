@@ -39,6 +39,14 @@ describe('ProductQueryService', () => {
     totalPages: 1,
   };
 
+  const mockEmptyResult = {
+    data: [],
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 0,
+  };
+
   beforeEach(async () => {
     mockProductRepository = {
       saveProducts: jest.fn(),
@@ -70,7 +78,7 @@ describe('ProductQueryService', () => {
   });
 
   describe('getProducts', () => {
-    it('should get products without cache and save to cache', async () => {
+    it('should get products without cache and save to cache when data is non-empty', async () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
@@ -85,7 +93,23 @@ describe('ProductQueryService', () => {
       expect(mockCsvUploadService.addCacheKey).toHaveBeenCalledWith(cacheKey);
     });
 
-    it('should get products from cache', async () => {
+    it('should get products without cache and not save to cache when data is empty', async () => {
+      const dto: GetProductsDto = { limit: 10, page: 1 };
+      const cacheKey = `products:${JSON.stringify(dto)}`;
+
+      mockCacheManager.get.mockResolvedValue(null);
+      mockProductRepository.getProducts.mockResolvedValue(mockEmptyResult);
+
+      const result = await service.getProducts(dto);
+
+      expect(result).toEqual(mockEmptyResult);
+      expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
+      expect(mockCacheManager.get).toHaveBeenCalledWith(cacheKey);
+      expect(mockCacheManager.set).not.toHaveBeenCalled();
+      expect(mockCsvUploadService.addCacheKey).not.toHaveBeenCalled();
+    });
+
+    it('should get products from cache when available', async () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
@@ -100,12 +124,11 @@ describe('ProductQueryService', () => {
       expect(mockCsvUploadService.addCacheKey).not.toHaveBeenCalled();
     });
 
-    it('should handle cache error and still return products', async () => {
+    it('should handle cache set error and still return products', async () => {
       const dto: GetProductsDto = { limit: 10, page: 1 };
       const cacheKey = `products:${JSON.stringify(dto)}`;
 
       mockCacheManager.get.mockResolvedValue(null);
-      mockCacheManager.set.mockRejectedValue(new Error('Cache error'));
 
       const result = await service.getProducts(dto);
 
@@ -113,7 +136,7 @@ describe('ProductQueryService', () => {
       expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
       expect(mockCacheManager.get).toHaveBeenCalledWith(cacheKey);
       expect(mockCacheManager.set).toHaveBeenCalledWith(cacheKey, mockResult);
-      expect(mockCsvUploadService.addCacheKey).not.toHaveBeenCalled();
+      expect(mockCsvUploadService.addCacheKey).toHaveBeenCalledWith(cacheKey);
     });
 
     it('should filter products by name', async () => {
@@ -141,6 +164,10 @@ describe('ProductQueryService', () => {
 
       expect(result).toEqual(filteredResult);
       expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
+      expect(mockCacheManager.set).toHaveBeenCalledWith(
+        `products:${JSON.stringify(dto)}`,
+        filteredResult,
+      );
     });
 
     it('should sort products by name in descending order', async () => {
@@ -180,6 +207,10 @@ describe('ProductQueryService', () => {
 
       expect(result).toEqual(sortedResult);
       expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
+      expect(mockCacheManager.set).toHaveBeenCalledWith(
+        `products:${JSON.stringify(dto)}`,
+        sortedResult,
+      );
     });
 
     it('should paginate products', async () => {
@@ -207,6 +238,10 @@ describe('ProductQueryService', () => {
 
       expect(result).toEqual(paginatedResult);
       expect(mockProductRepository.getProducts).toHaveBeenCalledWith(dto);
+      expect(mockCacheManager.set).toHaveBeenCalledWith(
+        `products:${JSON.stringify(dto)}`,
+        paginatedResult,
+      );
     });
   });
 });

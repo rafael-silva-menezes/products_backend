@@ -1,10 +1,10 @@
-# Flatirons Backend (NestJS)
+# CSV Upload Backend (NestJS)
 
-This is the backend application for the Flatirons project, built with NestJS. It handles CSV file uploads, processes them asynchronously, integrates exchange rates, and serves product data via RESTful endpoints. The application is designed to be scalable, secure, and robust, supporting large files (up to 1GB or 200k+ lines) with efficient processing and storage.
+This is the backend application for the upload csv, built with NestJS. It handles CSV file uploads, processes them asynchronously, integrates exchange rates, and serves product data via RESTful endpoints. The application is designed to be scalable, secure, and robust, supporting large files (up to 1GB or 200k+ lines) with efficient processing and storage.
 
 ## Project Overview
 
-The Flatirons Backend fulfills the core requirements of the challenge by providing a system to:
+The CSV Upload  Backend fulfills the core requirements of the challenge by providing a system to:
 - Accept CSV uploads containing product data (`name`, `price`, `expiration`).
 - Process these files in the background, integrating exchange rates from an external API.
 - Store processed products in a PostgreSQL database with calculated exchange rate values.
@@ -76,7 +76,7 @@ The Flatirons Backend fulfills the core requirements of the challenge by providi
 1. **Clone the Repository**:
    ```bash
    git clone <repository-url>
-   cd flatirons_backend
+   cd products_backend
    ```
 
 2. **Install Dependencies**:
